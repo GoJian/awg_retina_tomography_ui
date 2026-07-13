@@ -109,8 +109,7 @@ export async function loadCSVData(csvUrl) {
       kind: fileKind(link),
       notes: iNotes >= 0 ? v[iNotes] : '',
       color: nextColor(),
-      // The whole "eye" shell reads best semi-transparent so inner features show.
-      opacity: /(^|_)eye($|\b)/i.test(fileName) ? 0.25 : 1.0,
+      opacity: 1.0,       // structures render as solid volumes by default (X-ray toggle to see inside)
       bytes: null,        // filled in asynchronously by probeSizes()
     });
   }

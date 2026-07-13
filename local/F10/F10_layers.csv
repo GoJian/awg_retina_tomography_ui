@@ -1,0 +1,6 @@
+sample_name,sample_link,file_name,seg_mesh_label,seg_mesh_link,notes
+F10 mouse eye,,retina.glb,Retina,local/F10/retina.glb,inner neural retina — geometric (no CT contrast)
+F10 mouse eye,,rpe.glb,RPE,local/F10/rpe.glb,retinal pigment epithelium — geometric (sub-resolution)
+F10 mouse eye,,choroid.glb,Choroid,local/F10/choroid.glb,vascular choroid — geometric (no CT contrast)
+F10 mouse eye,,sclera.glb,Sclera,local/F10/sclera.glb,outer sclera — edge-detected from the bright ring
+F10 mouse eye,,vitreous.glb,Vitreous,local/F10/vitreous.glb,vitreous cavity — edge-detected

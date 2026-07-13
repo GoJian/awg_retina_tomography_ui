@@ -68,6 +68,35 @@ body.no-right #work { grid-template-columns: var(--rail-l) 1fr 0; }
 
 .bar-div { width: 1px; height: 22px; background: rgba(255,255,255,.07); flex-shrink: 0; }
 
+/* Prominent Sync-views toggle */
+.sync-toggle {
+  display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 13px;
+  border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 12.5px; font-weight: 600;
+  color: var(--t-2); background: var(--inset-2); border: 1px solid var(--line-strong);
+  transition: background .15s, color .15s, border-color .15s, box-shadow .15s;
+}
+.sync-toggle .ms { font-size: 17px; }
+.sync-toggle:hover { background: rgba(255,255,255,.06); color: var(--t-primary); }
+.sync-toggle[aria-pressed="true"] {
+  color: var(--ac); background: color-mix(in oklab, var(--ac) 15%, transparent);
+  border-color: var(--ac); box-shadow: 0 0 0 1px color-mix(in oklab, var(--ac) 35%, transparent);
+}
+body.overlay-layout #btn-sync { display: none; }   /* only one view in overlay */
+
+/* "Rotation synced" badge over the viewport */
+#sync-badge {
+  position: absolute; top: 46px; left: 50%; transform: translateX(-50%) translateY(-6px);
+  z-index: 8; display: none; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 999px; pointer-events: none;
+  font-size: 11px; font-weight: 600; letter-spacing: .02em;
+  color: var(--ac); background: color-mix(in oklab, var(--ac) 16%, rgba(8,12,18,.82));
+  border: 1px solid var(--ac); backdrop-filter: blur(6px);
+  box-shadow: 0 6px 18px -8px color-mix(in oklab, var(--ac) 60%, transparent);
+  opacity: 0; transition: opacity .2s, transform .2s;
+}
+#sync-badge .ms { font-size: 14px; }
+body.synced:not(.overlay-layout) #sync-badge { display: inline-flex; opacity: 1; transform: translateX(-50%) translateY(0); }
+
 /* ----------------------------- Top bar ----------------------------------- */
 #topbar {
   display: flex; align-items: center; gap: 12px;
@@ -357,8 +386,8 @@ body.no-left .edge-restore.left { display: inline-flex; }
 .modal-msg { font-size: 13px; color: var(--t-2); line-height: 1.5; margin-bottom: 18px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 
-#help-dialog { border: 1px solid var(--line-strong); border-radius: 14px; padding: 0; background: var(--rail); color: var(--t-body); max-width: 520px; width: 92vw; box-shadow: 0 10px 40px -14px rgba(0,0,0,.85); }
-#help-dialog::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
+#help-dialog, #about-dialog { border: 1px solid var(--line-strong); border-radius: 14px; padding: 0; background: var(--rail); color: var(--t-body); max-width: 540px; width: 92vw; max-height: 88vh; box-shadow: 0 10px 40px -14px rgba(0,0,0,.85); }
+#help-dialog::backdrop, #about-dialog::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
 .dialog-card { position: relative; padding: 26px 28px; }
 .dialog-close { position: absolute; top: 14px; right: 14px; }
 .dialog-card h2 { margin: 0 0 12px; font-size: 18px; color: var(--t-primary); }
@@ -367,6 +396,11 @@ body.no-left .edge-restore.left { display: inline-flex; }
 .dialog-card ul { margin: 0; padding-left: 18px; }
 .dialog-card li { font-size: 13px; line-height: 1.8; color: var(--t-2); }
 .dialog-card strong { color: var(--t-body); }
+.dialog-card a { color: var(--ac); text-decoration: none; }
+.dialog-card a:hover { text-decoration: underline; }
+.about-line { line-height: 1.7; }
+.cite { font-size: 12px; color: var(--t-2); padding-left: 11px; border-left: 2px solid var(--line-strong); line-height: 1.65; }
+.dialog-foot { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 
 /* ----------------------------- Scrollbars -------------------------------- */

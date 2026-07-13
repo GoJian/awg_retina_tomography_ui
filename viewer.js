@@ -395,6 +395,9 @@ const stlToGlb = () => mirror(stl, glb);
 function setSync(on) {
   syncEnabled = on;
   btnSync.setAttribute('aria-pressed', String(on));
+  document.body.classList.toggle('synced', on);
+  const label = btnSync.querySelector('.sync-toggle-label');
+  if (label) label.textContent = on ? 'Synced' : 'Sync views';
   if (on) {
     glb.controls.addEventListener('change', glbToStl);
     stl.controls.addEventListener('change', stlToGlb);
@@ -904,6 +907,19 @@ function wireControls() {
   $('#btn-help').addEventListener('click', () => help.showModal());
   help.querySelector('.dialog-close').addEventListener('click', () => help.close());
   help.addEventListener('click', (e) => { if (e.target === help) help.close(); });
+
+  const about = $('#about-dialog');
+  $('#btn-about').addEventListener('click', () => about.showModal());
+  about.querySelector('.dialog-close').addEventListener('click', () => about.close());
+  about.addEventListener('click', (e) => { if (e.target === about) about.close(); });
+  $('#help-to-about').addEventListener('click', () => { help.close(); about.showModal(); });
+
+  // X-ray view — drives the global opacity so users can see inside solid structures.
+  $('#xray-view').addEventListener('change', (e) => {
+    const op = $('#global-opacity');
+    op.value = e.target.checked ? 30 : 100;
+    op.dispatchEvent(new Event('input', { bubbles: true }));
+  });
 
   $('#btn-clear-cache').addEventListener('click', async () => {
     const ok = await askConfirm({ title: 'Clear cache', message: 'Remove all locally cached meshes? They will re-download next time.', confirmLabel: 'Clear' });
