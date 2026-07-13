@@ -160,7 +160,7 @@ function addDemoSample() {
  * Returns null when the source is not an STL we know how to optimize.
  */
 export function deriveOptimizedURL(url = '') {
-  if (!/\.(stl|glb|gltf)(\?|$)/i.test(url)) return null;
+  if (!/\.stl(\?|$)/i.test(url)) return null;
   // Take the path after Hugging Face's `/resolve/<rev>/`, or the bare path.
   const m = url.match(/\/resolve\/[^/]+\/(.+)$/);
   const rel = (m ? m[1] : url.replace(/^https?:\/\/[^/]+\//, '')).split('?')[0];
