@@ -11,8 +11,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-import { loadCSVData, probeSizes, resolveStructure, samplesData, formatBytes } from './data-loader.js?v=4';
-import { fetchBuffer, isCached, clearCache } from './asset-loader.js?v=4';
+import { loadCSVData, probeSizes, resolveStructure, samplesData, formatBytes } from './data-loader.js?v=5';
+import { fetchBuffer, isCached, clearCache } from './asset-loader.js?v=5';
 
 // ---------------------------------------------------------------------------
 //  Config
@@ -450,7 +450,7 @@ const inFlight = new Map();
 // "Solid fill" mode: swap the F10 ocular coats for their solid-slab variant,
 // which fills each coat inward to the next coat (no gaps, no hollow shells).
 // The variant meshes ship alongside the normal ones under optimized/<dir>_solid/.
-let solidFill = false;
+let solidFill = true;   // default ON: F10 coats fill solid to the next coat (no gaps)
 function solidVariant(path) {
   return path && path.includes('F10_layers/')
     ? path.replace('F10_layers/', 'F10_layers_solid/')
