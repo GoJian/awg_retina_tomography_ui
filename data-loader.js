@@ -154,13 +154,19 @@ function addDemoSample() {
 }
 
 /**
- * Derive the path of an optimized (decimated + Draco) copy of an STL asset.
+ * Derive the path of an optimized (decimated + Draco) copy of an asset.
  * Optimized GLBs ship with the app under `optimized/<relative-path>.glb`
  * (same-origin → fast, no CORS), mirroring the dataset's folder layout.
- * Returns null when the source is not an STL we know how to optimize.
+ *
+ * Applies to STL sources (converted to GLB) and to GLB/glTF sources that have a
+ * locally-shipped replacement — e.g. the F10 ocular coats, whose remote meshes
+ * render with gaps between adjacent shells; the shipped copies are the gap-free
+ * (dilated, overlapping) rebuild. `resolveStructure` HEAD-probes the derived URL
+ * and silently falls back to the remote original when no local copy is present.
+ * Returns null when the source is not a mesh we know how to optimize.
  */
 export function deriveOptimizedURL(url = '') {
-  if (!/\.stl(\?|$)/i.test(url)) return null;
+  if (!/\.(stl|glb|gltf)(\?|$)/i.test(url)) return null;
   // Take the path after Hugging Face's `/resolve/<rev>/`, or the bare path.
   const m = url.match(/\/resolve\/[^/]+\/(.+)$/);
   const rel = (m ? m[1] : url.replace(/^https?:\/\/[^/]+\//, '')).split('?')[0];
