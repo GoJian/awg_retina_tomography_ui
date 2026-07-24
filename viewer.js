@@ -11,8 +11,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-import { loadCSVData, probeSizes, resolveStructure, samplesData, formatBytes } from './data-loader.js?v=2';
-import { fetchBuffer, isCached, clearCache } from './asset-loader.js?v=2';
+import { loadCSVData, probeSizes, resolveStructure, samplesData, formatBytes } from './data-loader.js?v=3';
+import { fetchBuffer, isCached, clearCache } from './asset-loader.js?v=3';
 
 // ---------------------------------------------------------------------------
 //  Config
