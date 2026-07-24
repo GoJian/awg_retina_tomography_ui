@@ -11,8 +11,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-import { loadCSVData, probeSizes, resolveStructure, samplesData, formatBytes } from './data-loader.js?v=5';
-import { fetchBuffer, isCached, clearCache } from './asset-loader.js?v=5';
+import { loadCSVData, probeSizes, resolveStructure, samplesData, formatBytes } from './data-loader.js?v=6';
+import { fetchBuffer, isCached, clearCache } from './asset-loader.js?v=6';
 
 // ---------------------------------------------------------------------------
 //  Config
@@ -78,7 +78,7 @@ function createPane(mountEl) {
   const camera = new THREE.PerspectiveCamera(52, 1, 0.01, 1e7);
   camera.position.set(0, 0, 100);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, stencil: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.localClippingEnabled = true;
@@ -117,6 +117,9 @@ function createPane(mountEl) {
   const grid = new THREE.GridHelper(1, 20, 0x2a3340, 0x1a2029);
   grid.visible = false; grid.userData.noClip = true; scene.add(grid);
 
+  // Holds stencil-cap geometry that fills the sliced cross-sections (see buildCaps).
+  const capGroup = new THREE.Group(); capGroup.userData.noClip = true; scene.add(capGroup);
+
   function size() {
     const w = mountEl.clientWidth || 1, h = mountEl.clientHeight || 1;
     renderer.setSize(w, h, false);
@@ -127,13 +130,14 @@ function createPane(mountEl) {
 
   return {
     mountEl, scene, camera, renderer, controls, root,
-    clipPlanes, activeClips: [], sliceGroup, sliceQuads, boxHelper, grid,
-    bounds: new THREE.Box3(), size, defaultDist: 100,
+    clipPlanes, activeClips: [], sliceGroup, sliceQuads, boxHelper, grid, capGroup,
+    bounds: new THREE.Box3(), size, defaultDist: 100, capsEnabled: false,
   };
 }
 
 const glb = createPane(glbPane);
 const stl = createPane(stlPane);
+stl.capsEnabled = true;   // the segmented-coat pane gets solid cross-section caps when sliced
 const panes = [glb, stl];
 
 // The STL pane is the "overlay workspace": every sample is a normalised group
@@ -349,8 +353,85 @@ function applyRenderModeToPane(pane) {
       m.needsUpdate = true;
     }
   });
+  buildCaps(pane);
 }
 function applyRenderModeAll() { panes.forEach(applyRenderModeToPane); }
+
+// ---------------------------------------------------------------------------
+//  Clip-plane capping
+// ---------------------------------------------------------------------------
+// A sliced mesh is a hollow open shell: at the cut you see straight through it,
+// so adjacent coats read as separated by dark seams. For the (common) single
+// active plane, fill each coat's cross-section with a stencil-masked colored
+// quad so the cut renders as a solid, gap-free surface. Standard three.js
+// stencil-cap technique (back faces increment, front faces decrement, cap drawn
+// where the count != 0), one group per coat so each keeps its own colour.
+const _capQuadGeom = new THREE.PlaneGeometry(1, 1);
+function stencilMat(side, op, plane) {
+  const m = new THREE.MeshBasicMaterial();
+  m.depthWrite = false; m.depthTest = false; m.colorWrite = false;
+  m.side = side; m.clippingPlanes = [plane];
+  m.stencilWrite = true; m.stencilFunc = THREE.AlwaysStencilFunc;
+  m.stencilFail = op; m.stencilZFail = op; m.stencilZPass = op;
+  return m;
+}
+function clearCaps(pane) {
+  const g = pane.capGroup;
+  if (!g) return;
+  for (const c of g.children) {
+    const ms = Array.isArray(c.material) ? c.material : [c.material];
+    ms.forEach((m) => m && m.dispose());
+  }
+  g.clear();
+}
+function buildCaps(pane) {
+  if (!pane.capsEnabled) return;
+  clearCaps(pane);
+  // cap only the single-plane case (the default); >1 plane falls back to uncapped
+  if (renderMode !== 'slices' || pane.activeClips.length !== 1) return;
+  const plane = pane.activeClips[0];
+
+  pane.root.updateWorldMatrix(true, true);
+  const coats = [];
+  pane.root.traverse((o) => {
+    if (!o.isMesh || o.userData.noClip || !o.geometry || !o.material) return;
+    let vis = o.visible, p = o.parent;
+    while (vis && p) { vis = p.visible; p = p.parent; }
+    if (!vis) return;
+    const mat = Array.isArray(o.material) ? o.material[0] : o.material;
+    coats.push({ mesh: o, color: mat.color });
+  });
+  if (!coats.length) return;
+
+  const size = pane.bounds.getSize(new THREE.Vector3());
+  const capSize = (Math.max(size.x, size.y, size.z) || 1) * 2.4;
+  const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), plane.normal.clone().normalize());
+  const pos = plane.normal.clone().multiplyScalar(-plane.constant);
+
+  let order = 100;
+  for (const { mesh, color } of coats) {
+    for (const [side, op] of [[THREE.BackSide, THREE.IncrementWrapStencilOp], [THREE.FrontSide, THREE.DecrementWrapStencilOp]]) {
+      const s = new THREE.Mesh(mesh.geometry, stencilMat(side, op, plane));
+      s.matrixAutoUpdate = false; s.matrixWorldAutoUpdate = false;
+      s.matrix.copy(mesh.matrixWorld); s.matrixWorld.copy(mesh.matrixWorld);
+      s.renderOrder = order; s.frustumCulled = false; s.userData.noClip = true;
+      pane.capGroup.add(s);
+    }
+    const capMat = new THREE.MeshBasicMaterial({ color: color.clone(), side: THREE.DoubleSide });
+    capMat.stencilWrite = true; capMat.stencilRef = 0; capMat.stencilFunc = THREE.NotEqualStencilFunc;
+    capMat.stencilFail = THREE.ReplaceStencilOp; capMat.stencilZFail = THREE.ReplaceStencilOp; capMat.stencilZPass = THREE.ReplaceStencilOp;
+    capMat.polygonOffset = true; capMat.polygonOffsetFactor = -order; capMat.polygonOffsetUnits = -1;
+    const cap = new THREE.Mesh(_capQuadGeom, capMat);
+    cap.scale.set(capSize, capSize, 1);
+    cap.quaternion.copy(quat);
+    cap.position.copy(pos);
+    cap.renderOrder = order + 1;
+    cap.frustumCulled = false; cap.userData.noClip = true;
+    cap.onAfterRender = (r) => r.clearStencil();
+    pane.capGroup.add(cap);
+    order += 3;
+  }
+}
 
 function setRenderMode(mode) {
   renderMode = mode;
@@ -471,6 +552,7 @@ async function reloadFillVariants() {
   const affected = [...featureObjects.keys()]
     .map((id) => findStructure(id))
     .filter((st) => st && solidVariant(st.path));
+  clearCaps(stl);   // drop caps that reference geometry we're about to dispose
   for (const st of affected) {
     const obj = featureObjects.get(st.id);
     const wasVisible = !!obj && obj.visible;
@@ -765,6 +847,7 @@ function buildRow(structure) {
     structure.color = parseInt(e.target.value.slice(1), 16);
     const obj = featureObjects.get(structure.id);
     if (obj) applyColor(obj, structure.color);
+    buildCaps(stl);
   });
   opacity.addEventListener('input', (e) => {
     setFill(e.target);
@@ -806,6 +889,7 @@ function annotateSize(structure) {
 function refreshStlEmpty() {
   const anyVisible = [...featureObjects.values()].some((o) => o.visible);
   stlEmpty.classList.toggle('hidden', anyVisible);
+  buildCaps(stl);   // keep cross-section caps in sync with which coats are shown
 }
 
 // ---------------------------------------------------------------------------
