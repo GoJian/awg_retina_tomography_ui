@@ -11,8 +11,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-import { loadCSVData, probeSizes, resolveStructure, samplesData, formatBytes } from './data-loader.js?v=3';
-import { fetchBuffer, isCached, clearCache } from './asset-loader.js?v=3';
+import { loadCSVData, probeSizes, resolveStructure, samplesData, formatBytes } from './data-loader.js?v=4';
+import { fetchBuffer, isCached, clearCache } from './asset-loader.js?v=4';
 
 // ---------------------------------------------------------------------------
 //  Config
@@ -447,14 +447,51 @@ const featureObjects = new Map();
 const rowRefs = new Map();
 const inFlight = new Map();
 
+// "Solid fill" mode: swap the F10 ocular coats for their solid-slab variant,
+// which fills each coat inward to the next coat (no gaps, no hollow shells).
+// The variant meshes ship alongside the normal ones under optimized/<dir>_solid/.
+let solidFill = false;
+function solidVariant(path) {
+  return path && path.includes('F10_layers/')
+    ? path.replace('F10_layers/', 'F10_layers_solid/')
+    : null;
+}
+function effectivePath(structure) {
+  if (solidFill) { const v = solidVariant(structure.path); if (v) return v; }
+  return structure.path;
+}
+function disposeObject(obj) {
+  obj.traverse((c) => {
+    if (c.isMesh) { c.geometry?.dispose(); if (Array.isArray(c.material)) c.material.forEach((m) => m.dispose()); else c.material?.dispose(); }
+  });
+}
+// Reload every currently-loaded F10 coat from the active variant, preserving
+// each row's visibility. Called when the Solid-fill toggle flips.
+async function reloadFillVariants() {
+  const affected = [...featureObjects.keys()]
+    .map((id) => findStructure(id))
+    .filter((st) => st && solidVariant(st.path));
+  for (const st of affected) {
+    const obj = featureObjects.get(st.id);
+    const wasVisible = !!obj && obj.visible;
+    if (inFlight.has(st.id)) inFlight.get(st.id).abort();
+    if (obj) { obj.parent?.remove(obj); disposeObject(obj); featureObjects.delete(st.id); }
+    await loadLayer(st);
+    const fresh = featureObjects.get(st.id);
+    if (fresh) fresh.visible = wasVisible;
+  }
+  refreshStlEmpty();
+}
+
 async function loadLayer(structure) {
   const refs = rowRefs.get(structure.id);
+  const url = effectivePath(structure);
   const controller = new AbortController();
   inFlight.set(structure.id, controller);
   setRowState(refs, 'loading', 'Downloading… 0%');
 
   try {
-    const buffer = await fetchBuffer(structure.path, {
+    const buffer = await fetchBuffer(url, {
       signal: controller.signal,
       onProgress: ({ loaded, total, fromCache }) => {
         if (fromCache) { setRowState(refs, 'loading', 'Loading from cache…'); return; }
@@ -481,7 +518,7 @@ async function loadLayer(structure) {
     if (!stlFitted || isNewGroup) { fitStl(layout === 'overlay' ? 1.7 : 1.45); stlFitted = true; }
     applyRenderModeToPane(stl);
     refreshStlEmpty();
-    setRowState(refs, 'loaded', (await isCached(structure.path)) ? 'Loaded · cached' : 'Loaded');
+    setRowState(refs, 'loaded', (await isCached(url)) ? 'Loaded · cached' : 'Loaded');
   } catch (err) {
     if (err.name === 'AbortError') setRowState(refs, 'idle', '');
     else {
@@ -919,6 +956,11 @@ function wireControls() {
     const op = $('#global-opacity');
     op.value = e.target.checked ? 30 : 100;
     op.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  $('#solid-fill').addEventListener('change', (e) => {
+    solidFill = e.target.checked;
+    reloadFillVariants();
   });
 
   $('#btn-clear-cache').addEventListener('click', async () => {
