@@ -11,8 +11,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-import { loadCSVData, probeSizes, resolveStructure, samplesData, formatBytes } from './data-loader.js?v=6';
-import { fetchBuffer, isCached, clearCache } from './asset-loader.js?v=6';
+import { loadCSVData, probeSizes, resolveStructure, samplesData, formatBytes } from './data-loader.js?v=7';
+import { fetchBuffer, isCached, clearCache } from './asset-loader.js?v=7';
 
 // ---------------------------------------------------------------------------
 //  Config
@@ -387,8 +387,9 @@ function clearCaps(pane) {
 function buildCaps(pane) {
   if (!pane.capsEnabled) return;
   clearCaps(pane);
-  // cap only the single-plane case (the default); >1 plane falls back to uncapped
-  if (renderMode !== 'slices' || pane.activeClips.length !== 1) return;
+  // Caps belong to Solid fill; with it off the slice view stays the original
+  // uncapped coats. Cap only the single-plane case (the default); >1 plane uncapped.
+  if (!solidFill || renderMode !== 'slices' || pane.activeClips.length !== 1) return;
   const plane = pane.activeClips[0];
 
   pane.root.updateWorldMatrix(true, true);
@@ -531,11 +532,12 @@ const inFlight = new Map();
 // "Solid fill" mode: swap the F10 ocular coats for their solid-slab variant,
 // which fills each coat inward to the next coat (no gaps, no hollow shells).
 // The variant meshes ship alongside the normal ones under optimized/<dir>_solid/.
-let solidFill = true;   // default ON: F10 coats fill solid to the next coat (no gaps)
+let solidFill = false;  // default OFF: show the original individual coats; toggle on for the filled+capped view
 function solidVariant(path) {
-  return path && path.includes('F10_layers/')
-    ? path.replace('F10_layers/', 'F10_layers_solid/')
-    : null;
+  // Map any F10 coat path (remote HF original or local optimized) to the
+  // locally-shipped solid-fill slab, so the toggle works regardless of source.
+  const m = path && path.match(/F10_layers\/([^/?#]+\.glb)/i);
+  return m ? `optimized/F10_layers_solid/${m[1]}` : null;
 }
 function effectivePath(structure) {
   if (solidFill) { const v = solidVariant(structure.path); if (v) return v; }
