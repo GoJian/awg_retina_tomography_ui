@@ -1,222 +1,156 @@
-[
-  {
-    "key": "cornea",
-    "label": "Cornea",
-    "tag": 1,
-    "file": "cornea.ply",
-    "faces": 6414,
-    "verts": 3209,
-    "watertight": true,
-    "volume_mm3": 128.13734454571306,
-    "bounds": [
-      [
-        -13.6,
-        -5.983,
-        -5.982
-      ],
-      [
-        -9.787,
-        5.984,
-        5.982
+{
+  "upat": [
+    {
+      "key": "globe",
+      "label": "Globe (sclera)",
+      "faces": 800,
+      "watertight": false,
+      "volume_mm3": 5467.531,
+      "bounds": [
+        [
+          -11.018,
+          -12.0,
+          -12.0
+        ],
+        [
+          11.018,
+          12.0,
+          12.0
+        ]
       ]
-    ]
-  },
-  {
-    "key": "aqueous",
-    "label": "Aqueous humour",
-    "tag": 2,
-    "file": "aqueous.ply",
-    "faces": 13344,
-    "verts": 6674,
-    "watertight": true,
-    "volume_mm3": 150.75474523883145,
-    "bounds": [
-      [
-        -12.6,
-        -6.52,
-        -6.52
-      ],
-      [
-        -8.6,
-        6.52,
-        6.52
+    },
+    {
+      "key": "pupil",
+      "label": "Pupil / cornea",
+      "faces": 160,
+      "watertight": false,
+      "volume_mm3": 1745.862,
+      "bounds": [
+        [
+          -12.952,
+          -6.793,
+          -6.736
+        ],
+        [
+          -10.915,
+          6.793,
+          6.851
+        ]
       ]
-    ]
-  },
-  {
-    "key": "iris",
-    "label": "Iris",
-    "tag": 3,
-    "file": "iris.ply",
-    "faces": 17210,
-    "verts": 8605,
-    "watertight": true,
-    "volume_mm3": 252.48361744844908,
-    "bounds": [
-      [
-        -10.326,
-        -8.682,
-        -8.682
-      ],
-      [
-        -6.454,
-        8.682,
-        8.682
+    },
+    {
+      "key": "lateral_rectus",
+      "label": "Lateral rectus",
+      "faces": 1560,
+      "watertight": false,
+      "volume_mm3": 49.905,
+      "bounds": [
+        [
+          -8.167,
+          -1.663,
+          -13.273
+        ],
+        [
+          33.316,
+          2.3,
+          13.29
+        ]
       ]
-    ]
-  },
-  {
-    "key": "lens",
-    "label": "Lens",
-    "tag": 4,
-    "file": "lens.ply",
-    "faces": 2856,
-    "verts": 1430,
-    "watertight": true,
-    "volume_mm3": 88.31267944678041,
-    "bounds": [
-      [
-        -9.793,
-        -3.521,
-        -3.52
-      ],
-      [
-        -6.158,
-        3.521,
-        3.52
+    },
+    {
+      "key": "medial_rectus",
+      "label": "Medial rectus",
+      "faces": 1560,
+      "watertight": false,
+      "volume_mm3": 4.655,
+      "bounds": [
+        [
+          -9.963,
+          -1.7,
+          9.211
+        ],
+        [
+          29.058,
+          2.263,
+          17.42
+        ]
       ]
-    ]
-  },
-  {
-    "key": "vitreous",
-    "label": "Vitreous humour",
-    "tag": 5,
-    "file": "vitreous.ply",
-    "faces": 19862,
-    "verts": 9933,
-    "watertight": true,
-    "volume_mm3": 4675.775163323438,
-    "bounds": [
-      [
-        -8.6,
-        -10.6,
-        -10.6
-      ],
-      [
-        10.6,
-        10.6,
-        10.6
+    },
+    {
+      "key": "superior_rectus",
+      "label": "Superior rectus",
+      "faces": 1560,
+      "watertight": false,
+      "volume_mm3": 29.134,
+      "bounds": [
+        [
+          -8.886,
+          3.081,
+          -1.648
+        ],
+        [
+          31.502,
+          13.24,
+          17.468
+        ]
       ]
-    ]
-  },
-  {
-    "key": "sclera",
-    "label": "Sclera",
-    "tag": 6,
-    "file": "sclera.ply",
-    "faces": 36686,
-    "verts": 18343,
-    "watertight": true,
-    "volume_mm3": 1644.4939383121466,
-    "bounds": [
-      [
-        -10.689,
-        -12.498,
-        -12.5
-      ],
-      [
-        12.5,
-        12.5,
-        12.5
+    },
+    {
+      "key": "inferior_rectus",
+      "label": "Inferior rectus",
+      "faces": 1560,
+      "watertight": false,
+      "volume_mm3": 22.945,
+      "bounds": [
+        [
+          -9.533,
+          -13.295,
+          -1.592
+        ],
+        [
+          31.449,
+          -1.931,
+          17.5
+        ]
       ]
-    ]
-  },
-  {
-    "key": "choroid",
-    "label": "Choroid",
-    "tag": 7,
-    "file": "choroid.ply",
-    "faces": 25038,
-    "verts": 12519,
-    "watertight": true,
-    "volume_mm3": 631.6727381411039,
-    "bounds": [
-      [
-        -6.804,
-        -11.5,
-        -11.5
-      ],
-      [
-        11.5,
-        11.5,
-        11.5
+    },
+    {
+      "key": "superior_oblique",
+      "label": "Superior oblique",
+      "faces": 1560,
+      "watertight": false,
+      "volume_mm3": 70.962,
+      "bounds": [
+        [
+          -10.102,
+          -0.243,
+          -4.025
+        ],
+        [
+          30.263,
+          13.54,
+          17.398
+        ]
       ]
-    ]
-  },
-  {
-    "key": "retina",
-    "label": "Retina",
-    "tag": 8,
-    "file": "retina.ply",
-    "faces": 22388,
-    "verts": 11196,
-    "watertight": true,
-    "volume_mm3": 428.8582570359975,
-    "bounds": [
-      [
-        -6.044,
-        -11.0,
-        -11.0
-      ],
-      [
-        11.316,
-        11.0,
-        11.0
+    },
+    {
+      "key": "inferior_oblique",
+      "label": "Inferior oblique",
+      "faces": 1560,
+      "watertight": false,
+      "volume_mm3": 66.535,
+      "bounds": [
+        [
+          -13.108,
+          -15.991,
+          -10.696
+        ],
+        [
+          9.451,
+          0.628,
+          12.529
+        ]
       ]
-    ]
-  },
-  {
-    "key": "lamina",
-    "label": "Lamina cribrosa",
-    "tag": 9,
-    "file": "lamina.ply",
-    "faces": 278,
-    "verts": 139,
-    "watertight": true,
-    "volume_mm3": 0.3631765902277593,
-    "bounds": [
-      [
-        10.412,
-        -4.607,
-        -0.75
-      ],
-      [
-        11.147,
-        -3.138,
-        0.75
-      ]
-    ]
-  },
-  {
-    "key": "optic_nerve",
-    "label": "Optic nerve",
-    "tag": 10,
-    "file": "optic_nerve.ply",
-    "faces": 2668,
-    "verts": 1336,
-    "watertight": true,
-    "volume_mm3": 17.531192303039305,
-    "bounds": [
-      [
-        10.493,
-        -6.879,
-        -0.75
-      ],
-      [
-        20.801,
-        -3.189,
-        0.75
-      ]
-    ]
-  }
-]
+    }
+  ]
+}

@@ -1,63 +1,135 @@
-# Eye anatomy model — provenance & licence
+# Reference eye models — provenance & licences
 
-`eye-anatomy.glb` is the reference human eyeball shown in the viewer's **left**
-pane. It is **not** NASA data — it is a published, citable anatomical model used
-as an orientation reference beside the segmented µCT coats on the right.
+The viewer's **left** pane shows a published, citable eye model for orientation
+beside the segmented µCT coats on the right. None of this is NASA data. Pick a
+model from the **ANATOMY** panel, or with `?model=<id>`.
 
-## Source
+Each file is one Draco-compressed glTF with **one named node per anatomical
+structure**, so the viewer can toggle, recolour, fade and slice each structure
+independently. Shared convention: millimetres, globe centred on the origin,
+antero-posterior axis along **X** with the cornea at **−X**.
 
-Derived from **[feelpp/mesh.eye](https://github.com/feelpp/mesh.eye)** — *A 3D
-geometrical model and meshing procedures for the human eyeball*, by Vincent
-Chabannes, Christophe Prud'homme, Thomas Saigre, Lorenzo Sala, Marcela Szopos
-and Christophe Trophime (Cemosis / IRMA UMR 7501, Université de Strasbourg,
-CNRS).
+Rebuild everything with [`../../tools/optimize/anatomy/build-anatomy.sh`](../../tools/optimize/anatomy/build-anatomy.sh).
 
-- DOI: <https://doi.org/10.5281/zenodo.13829740>
-- Model description: Sala L, Prud'homme C, Guidoboni G, Szopos M, Harris A.
-  *The ocular mathematical virtual simulator: A validated multiscale model for
-  hemodynamics and biomechanics in the human eye.*
-  Int J Numer Meth Biomed Engng. 2024; 40(2):e3791.
-  <https://doi.org/10.1002/cnm.3791>
+| id | File | Structures | Size | Licence |
+|----|------|-----------:|-----:|---------|
+| `mesheye`  | `eye-anatomy.glb`      | 10 | 352 KB | GPL-3.0 |
+| `humaneye` | `human-eye-cad.glb`    | 10 | 360 KB | GPL-3.0 |
+| `upat`     | `upat-oculomotor.glb`  |  8 |  30 KB | CC BY 4.0 |
 
-## What was done to it
+---
 
-`Eye.step` (the STEP solid model committed to mesh.eye) was tessellated with
-[gmsh](https://gmsh.info)'s OpenCASCADE kernel into one watertight triangle mesh
-per anatomical volume, then packed into a single Draco-compressed glTF binary
-with one named node per structure.
+## `mesheye` — feelpp/mesh.eye
 
-The ten solids follow the `MakePartition` order in mesh.eye's
-`construct-eye-STP.py`:
+*A 3D geometrical model and meshing procedures for the human eyeball* — Vincent
+Chabannes, Christophe Prud'homme, Thomas Saigre, Lorenzo Sala, Marcela Szopos,
+Christophe Trophime (Cemosis / IRMA UMR 7501, Université de Strasbourg, CNRS).
 
-| # | Node key      | Structure       | Triangles | Volume (mm³) |
-|---|---------------|-----------------|----------:|-------------:|
-| 1 | `cornea`      | Cornea          |     6,414 |       128.14 |
-| 2 | `aqueous`     | Aqueous humour  |    13,344 |       150.75 |
-| 3 | `iris`        | Iris            |    17,210 |       252.48 |
-| 4 | `lens`        | Lens            |     2,856 |        88.31 |
-| 5 | `vitreous`    | Vitreous humour |    19,862 |     4,675.78 |
-| 6 | `sclera`      | Sclera          |    36,686 |     1,644.49 |
-| 7 | `choroid`     | Choroid         |    25,038 |       631.67 |
-| 8 | `retina`      | Retina          |    22,388 |       428.86 |
-| 9 | `lamina`      | Lamina cribrosa |       278 |         0.36 |
-|10 | `optic_nerve` | Optic nerve     |     2,668 |        17.53 |
+- <https://github.com/feelpp/mesh.eye> · DOI [10.5281/zenodo.13829740](https://doi.org/10.5281/zenodo.13829740)
+- Model described in: Sala L, Prud'homme C, Guidoboni G, Szopos M, Harris A.
+  *The ocular mathematical virtual simulator.* Int J Numer Meth Biomed Engng.
+  2024; 40(2):e3791. <https://doi.org/10.1002/cnm.3791>
 
-Total 146,744 triangles, 352 KB. Geometry is in millimetres, centred on the
-globe; the antero-posterior axis is **X** (cornea at −X, optic nerve at +X).
-Each solid was verified watertight, and the tag→structure mapping was confirmed
-independently against the geometry (nesting radii sclera ⊃ choroid ⊃ retina ⊃
-vitreous, antero-posterior centroids, and volumes against published ocular
-anatomy).
+`Eye.step` tessellated with gmsh's OpenCASCADE kernel. Solid order follows the
+`MakePartition` call in `construct-eye-STP.py`.
 
-Reproduce with `tools/optimize/anatomy/build-anatomy.sh`.
+| Structure | Triangles | Volume (mm³) |
+|-----------|----------:|-------------:|
+| Cornea | 6,414 | 128.14 |
+| Aqueous humour | 13,344 | 150.75 |
+| Iris | 17,210 | 252.48 |
+| Lens | 2,856 | 88.31 |
+| Vitreous humour | 19,862 | 4,675.78 |
+| Sclera | 36,686 | 1,644.49 |
+| Choroid | 25,038 | 631.67 |
+| Retina | 22,388 | 428.86 |
+| Lamina cribrosa | 278 | 0.36 |
+| Optic nerve | 2,668 | 17.53 |
 
-## Licence
+147 k triangles. All ten solids verified watertight.
 
-mesh.eye is licensed **GPL-3.0**, so the meshes derived from it in this
-directory are also **GPL-3.0** — see [`LICENSE`](LICENSE). This is a separate
-work from the viewer, which remains MIT (see the repository root
-[`LICENSE`](../../LICENSE)); the two are merely aggregated, and loading this
-file does not make the viewer a derivative work of it.
+## `humaneye` — the CAD eye mesh.eye is derived from
 
-If you replace the anatomy model with your own, point the viewer at it with
-`?anatomy=<url>` or edit `ANATOMY_URL` in `viewer.js`.
+`human_eye.stp`, the SolidWorks model in the same repository that
+`construct-eye-STP.py` reads as its input, and the geometry the Feel++ ocular
+heat/flow work is ultimately built on. It carries two structures the derived
+`Eye.step` does not — the **suspensory ligament** (zonules, 124 separate fibre
+surfaces) and the **central retinal artery and vein** — but lacks the lamina
+cribrosa, the separated aqueous humour and the standalone optic nerve that
+mesh.eye's script constructs.
+
+| Structure | Triangles | Volume (mm³) |
+|-----------|----------:|-------------:|
+| Cornea | 6,418 | 128.14 |
+| Iris & ciliary body | 15,452 | 252.49 |
+| Suspensory ligament | 10,510 | 35.64 |
+| Lens | 1,882 | 88.18 |
+| Vitreous humour | 18,176 | 4,641.99 |
+| Sclera | 40,712 | 1,792.76 |
+| Choroid | 25,022 | 631.66 |
+| Retina | 26,208 | 524.83 |
+| Retinal vein | 2,514 | 1.90 |
+| Central retinal artery | 2,514 | 1.90 |
+
+149 k triangles. Solids were identified from the geometry (volume, centroid,
+radial nesting) and then cross-checked against `mesheye`: cornea 128.14 in both,
+iris 252.48 / 252.49, choroid 631.67 / 631.66 — the two files agree structure by
+structure, which is what confirms both mappings. The artery and vein are
+near-identical twins separated only in y and take the source script's own
+`Vein_h, Artery_h` order.
+
+## `upat` — Upatras OpenSim oculomotor model
+
+*An Open-Source OpenSim Oculomotor Model for Kinematics and Dynamics Simulation*
+— Dimitar Stanev et al., University of Patras.
+[arXiv:1807.07332](https://arxiv.org/abs/1807.07332) ·
+<https://simtk.org/projects/eye> · source at
+<https://gitlab.com/mitkof6/upat_eye_model>.
+
+Globe and pupil come from the model's own `sclera.obj` / `pupil.obj`. The six
+extraocular muscles are swept from the `PathPoint` sets in
+`UPAT_Eye_Model_Passive_Pulleys_v4.osim`: the polyline is resampled finely and
+any point falling inside the 12 mm wrap sphere is pushed onto its surface, which
+is what the solver's `axial` wrap does and what makes the muscles hug the sclera
+the way real recti do. The cross-section is a flattened ellipse — wide
+tangentially, thin radially — because the recti are broad straps, not cords.
+
+Structures: globe, cornea/pupil, lateral / medial / superior / inferior rectus,
+superior and inferior oblique. 10 k triangles.
+
+The Upatras model points anterior along **+X**; it is rotated 180° about Y (a
+proper rotation, so it stays a right eye) to match the others.
+
+---
+
+## Projects surveyed but not loadable
+
+These are listed, disabled, in the model menu rather than hidden, so it is clear
+they were considered. None ships 3D anatomical geometry:
+
+| Project | Why not |
+|---------|---------|
+| ISETBio | MATLAB scene→retinal-image optics and photoreceptor simulation; no anatomical mesh |
+| OpenRetina | Data-driven networks predicting retinal responses; no geometry |
+| V-Cornea | Agent-based corneal epithelium on a CompuCell3D cell lattice; cell-scale, no eye mesh |
+| OpenEyeSim | Older extraocular-muscle work superseded by the Upatras model; no public geometry |
+| pulse2percept | Retinal-implant and percept simulation; electrode arrays, not an eye |
+| Open Source Brain | NeuroML single-neuron models; not ocular anatomy |
+
+---
+
+## Licences
+
+The viewer's own code is **MIT** (repository root
+[`LICENSE`](../../LICENSE)). The models here keep their upstream licences and
+are merely aggregated with it — loading these files does not make the viewer a
+derivative work of them.
+
+- `eye-anatomy.glb`, `human-eye-cad.glb` — **GPL-3.0**, see
+  [`LICENSE-mesh.eye-GPL-3.0.txt`](LICENSE-mesh.eye-GPL-3.0.txt)
+- `upat-oculomotor.glb` — **CC BY 4.0**, see
+  [`LICENSE-upat-CC-BY-4.0.txt`](LICENSE-upat-CC-BY-4.0.txt)
+
+To use a model that isn't here, point the viewer at it with `?anatomy=<url>`; if
+its glTF node names don't match a registered model the per-structure panel is
+skipped and it simply renders whole.

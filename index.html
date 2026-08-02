@@ -76,17 +76,22 @@
         </div>
       </section>
 
-      <section class="rail-sec" id="anatomy-sec" hidden>
+      <section class="rail-sec" id="anatomy-sec">
         <div class="sec-head">
           <span>ANATOMY</span>
           <span class="chip-count" id="anatomy-count">0</span>
         </div>
-        <div class="seg seg-3" id="anatomy-preset">
-          <button class="seg-btn active" data-preset="whole">Whole eye</button>
-          <button class="seg-btn" data-preset="coats">Coats</button>
-          <button class="seg-btn" data-preset="media">Media</button>
+        <div class="model-picker">
+          <button id="model-selector" class="pill pill-wide" title="Choose the reference eye model">
+            <span class="ms">visibility</span>
+            <span id="model-label">mesh.eye</span>
+            <span class="ms">expand_more</span>
+          </button>
+          <div id="model-menu" role="menu"></div>
         </div>
-        <div class="seg-desc mono" id="anatomy-preset-desc">Intact globe &middot; clear cornea</div>
+        <div class="model-source mono" id="anatomy-source"></div>
+        <div class="seg" id="anatomy-preset"></div>
+        <div class="seg-desc mono" id="anatomy-preset-desc"></div>
         <div id="anatomy-tree"></div>
       </section>
 
@@ -233,7 +238,7 @@
     <ul>
       <li><strong>Rotate</strong> drag · <strong>Pan</strong> right-drag · <strong>Zoom</strong> scroll</li>
       <li><strong>Sync</strong> links rotation of both views</li>
-      <li><strong>Anatomy</strong> shows or hides each of the ten structures of the reference eye, and recolours them; the presets are shortcuts (<em>Whole eye</em>, <em>Coats</em>, <em>Media</em>)</li>
+      <li><strong>Anatomy</strong> picks which reference eye model to show, then toggles, recolours and fades each of its structures; each model brings its own presets</li>
       <li><strong>Rendering</strong> switches Surface / Wireframe / Slices</li>
       <li><strong>Slices</strong> cuts the meshes with three orthogonal planes (tri-planar MPR) to reveal interior structure</li>
     </ul>
@@ -273,25 +278,37 @@
       <a href="https://huggingface.co/datasets/kush1434/awg_retina_tomography_ui" target="_blank" rel="noopener">Hugging Face ↗</a>.
     </p>
 
-    <h3>Reference eye anatomy</h3>
+    <h3>Reference eye models</h3>
     <p class="cite">
-      The whole-eye model in the left pane is <strong>not</strong> NASA data — it is a published human
-      eyeball geometry shown for orientation. Chabannes, V., Prud'homme, C., Saigre, T., Sala, L.,
-      Szopos, M., &amp; Trophime, C. <em>A 3D geometrical model and meshing procedures for the human
-      eyeball</em> (Cemosis, IRMA UMR 7501, Université de Strasbourg, CNRS) —
+      The left pane is <strong>not</strong> NASA data — it is a published open-source eye model,
+      shown for orientation. Pick one in the <strong>ANATOMY</strong> panel:
+    </p>
+    <p class="cite">
+      <strong>mesh.eye</strong> and the <strong>Feel++ CAD eye</strong> — Chabannes, V., Prud'homme, C.,
+      Saigre, T., Sala, L., Szopos, M., &amp; Trophime, C. <em>A 3D geometrical model and meshing
+      procedures for the human eyeball</em> (Cemosis, IRMA UMR 7501, Université de Strasbourg, CNRS) —
       <a href="https://github.com/feelpp/mesh.eye" target="_blank" rel="noopener">feelpp/mesh.eye ↗</a>,
-      <a href="https://doi.org/10.5281/zenodo.13829740" target="_blank" rel="noopener">doi:10.5281/zenodo.13829740</a>.
-      Model described in Sala, L., Prud'homme, C., Guidoboni, G., Szopos, M., &amp; Harris, A.,
-      <em>Int J Numer Meth Biomed Engng</em> 2024; 40(2):e3791.
-      Its <code>Eye.step</code> solid model was tessellated into ten watertight structures
-      (cornea, aqueous humour, iris, lens, vitreous humour, sclera, choroid, retina, lamina cribrosa,
-      optic nerve). Note it is a <strong>human</strong> eye, while the segmented scan is
-      <strong>mouse</strong> — the three coats tagged <span class="cite-tag">µCT</span> are the ones
-      resolved in both. Licensed GPL-3.0, separately from this viewer's MIT code.
+      <a href="https://doi.org/10.5281/zenodo.13829740" target="_blank" rel="noopener">doi:10.5281/zenodo.13829740</a>;
+      described in Sala, L. et&nbsp;al., <em>Int J Numer Meth Biomed Engng</em> 2024; 40(2):e3791. GPL-3.0.
+    </p>
+    <p class="cite">
+      <strong>Upatras oculomotor</strong> — Stanev, D. et&nbsp;al. <em>An open-source OpenSim oculomotor
+      model for kinematics and dynamics simulation</em>, University of Patras
+      (<a href="https://arxiv.org/abs/1807.07332" target="_blank" rel="noopener">arXiv:1807.07332</a>,
+      <a href="https://simtk.org/projects/eye" target="_blank" rel="noopener">simtk.org/projects/eye ↗</a>).
+      Globe plus the six extraocular muscles, swept from the model's own path points. CC BY 4.0.
+    </p>
+    <p class="cite">
+      Every model is a <strong>human</strong> eye while the segmented scan is <strong>mouse</strong>;
+      they are references for orientation, not for morphometric comparison. Structures tagged
+      <span class="cite-tag">µCT</span> are the ones resolved in both panes. Model licences are separate
+      from this viewer's MIT code — see <code>optimized/anatomy/README.md</code>, which also lists the
+      projects surveyed that ship no 3D geometry (ISETBio, OpenRetina, V-Cornea, OpenEyeSim,
+      pulse2percept, Open Source Brain).
     </p>
 
     <h3>Acknowledgements</h3>
-    <p class="cite">Rendering with <a href="https://threejs.org" target="_blank" rel="noopener">Three.js</a> (STL / glTF loaders, OrbitControls). Meshes tessellated with <a href="https://gmsh.info" target="_blank" rel="noopener">gmsh</a>, decimated &amp; Draco-compressed with <a href="https://gltf-transform.dev" target="_blank" rel="noopener">glTF-Transform</a>.</p>
+    <p class="cite">Rendering with <a href="https://threejs.org" target="_blank" rel="noopener">Three.js</a> (STL / glTF loaders, OrbitControls). Solid models tessellated with <a href="https://gmsh.info" target="_blank" rel="noopener">gmsh</a>, decimated &amp; Draco-compressed with <a href="https://gltf-transform.dev" target="_blank" rel="noopener">glTF-Transform</a>.</p>
   </div>
 </dialog>
 

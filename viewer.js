@@ -18,58 +18,114 @@ import { fetchBuffer, isCached, clearCache } from './asset-loader.js?v=7';
 //  Config
 // ---------------------------------------------------------------------------
 const HF_BASE = 'https://huggingface.co/datasets/kush1434/awg_retina_tomography_ui/resolve/main';
-const ANATOMY_URL = 'optimized/anatomy/eye-anatomy.glb';
 const HEAVY_BYTES = 400 * 1024 * 1024;
 const PLANE_COLORS = { x: 0x7bd88f, y: 0xebb46e, z: 0x78aaeb };  // sagittal / axial / coronal
 
 // ---------------------------------------------------------------------------
-//  Anatomy structures
+//  Reference eye models
 // ---------------------------------------------------------------------------
-// The left-pane reference eye is feelpp/mesh.eye (GPL-3.0, doi:10.5281/zenodo.13829740)
-// tessellated into ten named, watertight solids — see optimized/anatomy/README.md.
-// `key` matches the glTF node name; `coat` marks the three structures that the
-// µCT segmentation on the right also resolves, so the two panes can be read
+// The left pane can show any of several published open-source eye models. Each
+// ships as one Draco glTF with a named node per anatomical structure — see
+// optimized/anatomy/README.md for provenance and licences.
+//
+// Per structure: `key` matches the glTF node name. `coat` marks the structures
+// the µCT segmentation on the right also resolves, so the two panes can be read
 // against each other. `depth` is how deeply nested the structure sits
 // (0 = outermost); translucent shells are drawn back-faces outermost-in, then
 // front-faces innermost-out, which is what makes them blend in the right order.
-const ANATOMY_STRUCTURES = [
-  { key: 'sclera',      label: 'Sclera',          group: 'Ocular coats',      color: 0xc6c0b2, opacity: 1.00, rough: 0.52, depth: 0, coat: true },
-  { key: 'choroid',     label: 'Choroid',         group: 'Ocular coats',      color: 0x8e2b3c, opacity: 1.00, rough: 0.58, depth: 1, coat: true },
-  { key: 'retina',      label: 'Retina',          group: 'Ocular coats',      color: 0xd9634c, opacity: 1.00, rough: 0.62, depth: 2, coat: true },
-  // The cornea and aqueous are all but colourless in life; tinting them any
-  // harder than this fogs the iris behind them to grey.
-  { key: 'cornea',      label: 'Cornea',          group: 'Anterior segment',  color: 0xd6edf5, opacity: 0.15, rough: 0.05, depth: 0 },
-  { key: 'aqueous',     label: 'Aqueous humour',  group: 'Anterior segment',  color: 0xd8f0f8, opacity: 0.05, rough: 0.05, depth: 1 },
-  { key: 'iris',        label: 'Iris',            group: 'Anterior segment',  color: 0x8a5626, opacity: 1.00, rough: 0.70, depth: 2 },
-  { key: 'lens',        label: 'Lens',            group: 'Anterior segment',  color: 0xefdaa6, opacity: 0.82, rough: 0.10, depth: 3 },
-  { key: 'vitreous',    label: 'Vitreous humour', group: 'Posterior segment', color: 0xbfe2f0, opacity: 0.09, rough: 0.08, depth: 3 },
-  { key: 'lamina',      label: 'Lamina cribrosa', group: 'Optic nerve head',  color: 0x8fbe9a, opacity: 1.00, rough: 0.62, depth: 3 },
-  { key: 'optic_nerve', label: 'Optic nerve',     group: 'Optic nerve head',  color: 0xded3b8, opacity: 1.00, rough: 0.66, depth: 1 },
-];
-const ANATOMY_DEFAULTS = new Map(ANATOMY_STRUCTURES.map((s) => [s.key, { color: s.color, opacity: s.opacity }]));
+//
+// Models flagged `unavailable` are the remaining projects surveyed for this
+// pane. They are listed rather than hidden so it is clear they were considered
+// and why they cannot be rendered — they are simulation code or data-driven
+// models that ship no 3D anatomical geometry at all.
 
-// Named viewing presets. `hidden` lists the structures a preset switches off;
-// `opacity` overrides the default alpha of the ones it keeps.
-const ANATOMY_PRESETS = {
-  whole: {
-    label: 'Whole eye',
-    desc: 'Intact globe · clear cornea',
-    hidden: [],
-    opacity: {},
-  },
-  coats: {
-    label: 'Coats',
-    desc: 'The three coats the µCT segments',
-    hidden: ['cornea', 'aqueous', 'iris', 'lens', 'vitreous'],
-    opacity: { sclera: 0.26, choroid: 0.62, retina: 1 },
-  },
-  media: {
-    label: 'Media',
-    desc: 'The optical path, coats faded back',
-    hidden: [],
-    opacity: { sclera: 0.10, choroid: 0.12, retina: 0.16, cornea: 0.45, aqueous: 0.26, vitreous: 0.2, lens: 0.95, iris: 1, optic_nerve: 0.5 },
-  },
+// The cornea and aqueous are all but colourless in life; tinting them any
+// harder than this fogs the iris behind them to grey.
+const S = {
+  sclera:      { label: 'Sclera',                 group: 'Ocular coats',      color: 0xc6c0b2, opacity: 1.00, rough: 0.52, depth: 0, coat: true },
+  choroid:     { label: 'Choroid',                group: 'Ocular coats',      color: 0x8e2b3c, opacity: 1.00, rough: 0.58, depth: 1, coat: true },
+  retina:      { label: 'Retina',                 group: 'Ocular coats',      color: 0xd9634c, opacity: 1.00, rough: 0.62, depth: 2, coat: true },
+  cornea:      { label: 'Cornea',                 group: 'Anterior segment',  color: 0xd6edf5, opacity: 0.15, rough: 0.05, depth: 0 },
+  aqueous:     { label: 'Aqueous humour',         group: 'Anterior segment',  color: 0xd8f0f8, opacity: 0.05, rough: 0.05, depth: 1 },
+  iris:        { label: 'Iris',                   group: 'Anterior segment',  color: 0x8a5626, opacity: 1.00, rough: 0.70, depth: 2 },
+  zonules:     { label: 'Suspensory ligament',    group: 'Anterior segment',  color: 0xe6dfc9, opacity: 0.85, rough: 0.35, depth: 3 },
+  lens:        { label: 'Lens',                   group: 'Anterior segment',  color: 0xefdaa6, opacity: 0.82, rough: 0.10, depth: 3 },
+  vitreous:    { label: 'Vitreous humour',        group: 'Posterior segment', color: 0xbfe2f0, opacity: 0.09, rough: 0.08, depth: 3 },
+  lamina:      { label: 'Lamina cribrosa',        group: 'Optic nerve head',  color: 0x8fbe9a, opacity: 1.00, rough: 0.62, depth: 3 },
+  optic_nerve: { label: 'Optic nerve',            group: 'Optic nerve head',  color: 0xded3b8, opacity: 1.00, rough: 0.66, depth: 1 },
+  artery:      { label: 'Central retinal artery', group: 'Retinal vessels',   color: 0xc62f2f, opacity: 1.00, rough: 0.55, depth: 2 },
+  vein:        { label: 'Retinal vein',           group: 'Retinal vessels',   color: 0x4a5aa8, opacity: 1.00, rough: 0.55, depth: 2 },
+  globe:       { label: 'Globe (sclera)',         group: 'Globe',             color: 0xc6c0b2, opacity: 1.00, rough: 0.52, depth: 0, coat: true },
+  pupil:       { label: 'Cornea / pupil',         group: 'Globe',             color: 0x2b2f36, opacity: 1.00, rough: 0.30, depth: 1 },
 };
+// Anything not in S is an extraocular muscle, given as [key, label].
+const muscle = (label) => ({ label, group: 'Extraocular muscles', color: 0xb84540, opacity: 1.00, rough: 0.66, depth: 0 });
+const struct = (keys) => keys.map((k) => (Array.isArray(k)
+  ? { key: k[0], ...muscle(k[1]) }
+  : { key: k, ...S[k] }));
+
+const ANATOMY_MODELS = [
+  {
+    id: 'mesheye',
+    label: 'mesh.eye',
+    blurb: 'Human eyeball · 10 structures incl. lamina cribrosa',
+    url: 'optimized/anatomy/eye-anatomy.glb',
+    source: 'feelpp/mesh.eye', href: 'https://github.com/feelpp/mesh.eye', license: 'GPL-3.0', focus: 'sclera',
+    structures: struct(['sclera', 'choroid', 'retina', 'cornea', 'aqueous', 'iris', 'lens', 'vitreous', 'lamina', 'optic_nerve']),
+    presets: {
+      whole: { label: 'Whole eye', desc: 'Intact globe · clear cornea', hidden: [], opacity: {} },
+      coats: { label: 'Coats', desc: 'The three coats the µCT segments',
+        hidden: ['cornea', 'aqueous', 'iris', 'lens', 'vitreous'],
+        opacity: { sclera: 0.26, choroid: 0.62, retina: 1 } },
+      media: { label: 'Media', desc: 'The optical path, coats faded back', hidden: [],
+        opacity: { sclera: 0.10, choroid: 0.12, retina: 0.16, cornea: 0.45, aqueous: 0.26, vitreous: 0.2, lens: 0.95, iris: 1, optic_nerve: 0.5 } },
+    },
+  },
+  {
+    id: 'humaneye',
+    label: 'Feel++ CAD eye',
+    blurb: 'The CAD eye mesh.eye derives from · adds zonules & vessels',
+    url: 'optimized/anatomy/human-eye-cad.glb',
+    source: 'feelpp/mesh.eye', href: 'https://github.com/feelpp/mesh.eye', license: 'GPL-3.0', focus: 'sclera',
+    structures: struct(['sclera', 'choroid', 'retina', 'cornea', 'iris', 'zonules', 'lens', 'vitreous', 'artery', 'vein']),
+    presets: {
+      whole: { label: 'Whole eye', desc: 'Intact globe · clear cornea', hidden: [], opacity: {} },
+      coats: { label: 'Coats', desc: 'The three coats the µCT segments',
+        hidden: ['cornea', 'iris', 'zonules', 'lens', 'vitreous'],
+        opacity: { sclera: 0.26, choroid: 0.62, retina: 1, artery: 1, vein: 1 } },
+      media: { label: 'Media', desc: 'The optical path, coats faded back', hidden: [],
+        opacity: { sclera: 0.10, choroid: 0.12, retina: 0.16, cornea: 0.45, vitreous: 0.2, lens: 0.95, iris: 1, zonules: 1 } },
+    },
+  },
+  {
+    id: 'upat',
+    label: 'Upatras oculomotor',
+    blurb: 'Globe + the six extraocular muscles',
+    url: 'optimized/anatomy/upat-oculomotor.glb',
+    source: 'Upatras eye model', href: 'https://simtk.org/projects/eye', license: 'CC BY 4.0', focus: 'globe',
+    structures: struct(['globe', 'pupil',
+      ['lateral_rectus', 'Lateral rectus'], ['medial_rectus', 'Medial rectus'],
+      ['superior_rectus', 'Superior rectus'], ['inferior_rectus', 'Inferior rectus'],
+      ['superior_oblique', 'Superior oblique'], ['inferior_oblique', 'Inferior oblique']]),
+    presets: {
+      whole: { label: 'Whole', desc: 'Globe with all six muscles', hidden: [], opacity: {} },
+      muscles: { label: 'Muscles', desc: 'Muscles over a translucent globe', hidden: [],
+        opacity: { globe: 0.22, pupil: 0.5 } },
+      recti: { label: 'Recti', desc: 'The four recti only', hidden: ['superior_oblique', 'inferior_oblique'],
+        opacity: { globe: 0.3, pupil: 0.6 } },
+    },
+  },
+  // Surveyed, but they ship no 3D anatomical geometry to render.
+  { id: 'isetbio',    label: 'ISETBio',          unavailable: 'MATLAB optics & photoreceptor simulation — no anatomical mesh' },
+  { id: 'openretina', label: 'OpenRetina',       unavailable: 'Data-driven retinal response networks — no geometry' },
+  { id: 'vcornea',    label: 'V-Cornea',         unavailable: 'Agent-based corneal epithelium on a cell lattice — no eye mesh' },
+  { id: 'openeyesim', label: 'OpenEyeSim',       unavailable: 'Superseded by the Upatras model above; no public geometry' },
+  { id: 'p2p',        label: 'pulse2percept',    unavailable: 'Retinal-implant & percept simulation — electrode arrays, not an eye' },
+  { id: 'osb',        label: 'Open Source Brain', unavailable: 'NeuroML neuron models — single cells, not ocular anatomy' },
+];
+
+const DEFAULT_MODEL_ID = 'mesheye';
+const modelById = (id) => ANATOMY_MODELS.find((m) => m.id === id && !m.unavailable);
 
 // ---------------------------------------------------------------------------
 //  DOM
@@ -724,9 +780,48 @@ function parseGLTF(buffer) {
 //  Anatomy GLB (left pane) — lazy
 // ---------------------------------------------------------------------------
 let anatomyController = null;
+
+// Which reference model the left pane is showing. `?model=<id>` picks one at
+// load; `?anatomy=<url>` still overrides the file outright, for a model that
+// isn't in the registry.
+let activeModelId = (() => {
+  const q = new URLSearchParams(location.search).get('model');
+  return modelById(q) ? q : DEFAULT_MODEL_ID;
+})();
+const activeModel = () => modelById(activeModelId) || ANATOMY_MODELS[0];
+
 function resolveAnatomyURL() {
-  return new URLSearchParams(location.search).get('anatomy') || ANATOMY_URL;
+  return new URLSearchParams(location.search).get('anatomy') || activeModel().url;
 }
+
+// Switch models: drop the current one entirely (geometry, materials, per-
+// structure state) and load the new one in its place.
+async function setAnatomyModel(id) {
+  if (!modelById(id) || id === activeModelId) return;
+  anatomyController?.abort();
+  activeModelId = id;
+
+  if (anatomyObject) {
+    anatomyObject.parent?.remove(anatomyObject);
+    disposeObject(anatomyObject);
+    anatomyObject = null;
+  }
+  anatomyParts.clear();
+  anatomyState.clear();
+  anatomyRowRefs.clear();
+  anatomyPreset = 'whole';
+  glb.root.clear();
+
+  const url = new URL(location.href);
+  if (id === DEFAULT_MODEL_ID) url.searchParams.delete('model');
+  else url.searchParams.set('model', id);
+  history.replaceState(null, '', url);
+
+  syncModelMenu();
+  buildAnatomyTree();
+  await loadAnatomy();
+}
+
 async function loadAnatomy() {
   const url = resolveAnatomyURL();
   anatomyController = new AbortController();
@@ -778,10 +873,13 @@ const anatomyState = new Map();     // key -> { visible, color, opacity }
 const anatomyRowRefs = new Map();   // key -> { row, checkbox, swatch, colorInput, opacity }
 let anatomyPreset = 'whole';
 
+// Structure metadata for the model currently loaded.
+const anatomyMeta = (key) => activeModel().structures.find((s) => s.key === key);
+
 function anatomyStateFor(key) {
   let st = anatomyState.get(key);
   if (!st) {
-    const d = ANATOMY_DEFAULTS.get(key) || { color: 0xffffff, opacity: 1 };
+    const d = anatomyMeta(key) || { color: 0xffffff, opacity: 1 };
     st = { visible: true, color: d.color, opacity: d.opacity };
     anatomyState.set(key, st);
   }
@@ -794,7 +892,7 @@ function anatomyStateFor(key) {
 function anatomyKeyOf(mesh) {
   for (let o = mesh; o; o = o.parent) {
     const k = (o.name || '').trim().toLowerCase();
-    if (ANATOMY_DEFAULTS.has(k)) return k;
+    if (anatomyMeta(k)) return k;
   }
   return null;
 }
@@ -851,7 +949,7 @@ function applyAnatomyStyle(key) {
   const mesh = anatomyParts.get(key);
   if (!mesh) return;
   const st = anatomyStateFor(key);
-  const meta = ANATOMY_STRUCTURES.find((s) => s.key === key);
+  const meta = anatomyMeta(key);
   const depth = meta?.depth ?? 0;
   const alpha = st.opacity * anatomyOpacity;
   const translucent = alpha < 0.999;
@@ -887,13 +985,14 @@ function applyAnatomyStyle(key) {
 function applyAnatomyStyleAll() { for (const key of anatomyParts.keys()) applyAnatomyStyle(key); }
 
 function setAnatomyPreset(name) {
-  const preset = ANATOMY_PRESETS[name];
+  const model = activeModel();
+  const preset = model.presets?.[name];
   if (!preset) return;
   anatomyPreset = name;
-  for (const s of ANATOMY_STRUCTURES) {
+  for (const s of model.structures) {
     const st = anatomyStateFor(s.key);
     st.visible = !preset.hidden.includes(s.key);
-    st.opacity = preset.opacity[s.key] ?? ANATOMY_DEFAULTS.get(s.key).opacity;
+    st.opacity = preset.opacity[s.key] ?? s.opacity;
   }
   applyAnatomyStyleAll();
   syncAnatomyRows();
@@ -926,8 +1025,8 @@ async function renderOverlay(state, data = {}) {
     glbOverlay.innerHTML = `
       <div class="overlay-card">
         <span class="ms overlay-icon">visibility</span>
-        <div class="overlay-title">Eye anatomy model</div>
-        <div class="overlay-sub">${cached ? 'Cached — loads instantly' : 'Large file · downloads once, then cached'}</div>
+        <div class="overlay-title">${activeModel().label}</div>
+        <div class="overlay-sub">${activeModel().blurb}${cached ? ' · cached' : ''}</div>
         <button class="btn btn-primary" id="overlay-load">Load model</button>
       </div>`;
     glbOverlay.querySelector('#overlay-load').onclick = loadAnatomy;
@@ -962,6 +1061,66 @@ function setRowState(refs, state, status) {
   refs.progress.style.display = state === 'loading' ? 'block' : 'none';
 }
 
+// Each model brings its own presets, so the segmented control is rebuilt when
+// the model changes.
+function buildPresetButtons() {
+  const host = $('#anatomy-preset');
+  if (!host) return;
+  const presets = activeModel().presets || {};
+  const names = Object.keys(presets);
+  host.innerHTML = '';
+  host.classList.toggle('seg-2', names.length === 2);
+  for (const name of names) {
+    const b = document.createElement('button');
+    b.className = 'seg-btn' + (name === anatomyPreset ? ' active' : '');
+    b.dataset.preset = name;
+    b.textContent = presets[name].label;
+    b.addEventListener('click', () => setAnatomyPreset(name));
+    host.appendChild(b);
+  }
+  const desc = $('#anatomy-preset-desc');
+  if (desc) desc.textContent = presets[anatomyPreset]?.desc || '';
+}
+
+// The model menu lists every project surveyed for this pane. The ones with no
+// 3D geometry stay in the list, disabled, with the reason — otherwise it looks
+// like they were simply forgotten.
+function buildModelMenu() {
+  const menu = $('#model-menu');
+  if (!menu) return;
+  menu.innerHTML = '';
+  for (const m of ANATOMY_MODELS) {
+    const item = document.createElement('button');
+    item.className = 'model-item';
+    item.dataset.modelId = m.id;
+    item.disabled = !!m.unavailable;
+    item.innerHTML =
+      `<span class="model-name">${m.label}</span>` +
+      `<span class="model-sub">${m.unavailable || m.blurb}</span>` +
+      (m.unavailable ? '' : `<span class="model-lic mono">${m.license}</span>`);
+    if (!m.unavailable) {
+      item.addEventListener('click', () => { menu.classList.remove('open'); setAnatomyModel(m.id); });
+    }
+    menu.appendChild(item);
+  }
+  syncModelMenu();
+}
+
+function syncModelMenu() {
+  const m = activeModel();
+  const label = $('#model-label');
+  if (label) label.textContent = m.label;
+  const src = $('#anatomy-source');
+  if (src) {
+    src.innerHTML = m.href
+      ? `<a href="${m.href}" target="_blank" rel="noopener">${m.source} ↗</a> · ${m.license}`
+      : `${m.source} · ${m.license}`;
+  }
+  document.querySelectorAll('#model-menu .model-item').forEach((b) => {
+    b.classList.toggle('active', b.dataset.modelId === activeModelId);
+  });
+}
+
 // The anatomy panel mirrors the layer tree on the right: one row per structure
 // with a visibility box, a recolourable swatch and an opacity slider.
 function buildAnatomyTree() {
@@ -970,12 +1129,11 @@ function buildAnatomyTree() {
   host.innerHTML = '';
   anatomyRowRefs.clear();
 
-  const sec = $('#anatomy-sec');
-  if (sec) sec.hidden = anatomyParts.size === 0;
-  if (!anatomyParts.size) return;
+  buildPresetButtons();
+  if (!anatomyParts.size) { const c = $('#anatomy-count'); if (c) c.textContent = '—'; return; }
 
   let lastGroup = null;
-  for (const s of ANATOMY_STRUCTURES) {
+  for (const s of activeModel().structures) {
     if (!anatomyParts.has(s.key)) continue;
     if (s.group !== lastGroup) {
       const h = document.createElement('div');
@@ -1379,8 +1537,10 @@ function wireControls() {
   // Layout (split / overlay) + anatomy group controls
   $('#layout-seg').addEventListener('click', (e) => { const b = e.target.closest('.seg-btn'); if (b) setLayout(b.dataset.layout); });
   $('#an-vis').addEventListener('change', (e) => { if (anatomyObject) anatomyObject.visible = e.target.checked; });
-  document.querySelectorAll('#anatomy-preset .seg-btn').forEach((b) => {
-    b.addEventListener('click', () => setAnatomyPreset(b.dataset.preset));
+  const modelBtn = $('#model-selector'), modelMenu = $('#model-menu');
+  modelBtn?.addEventListener('click', (e) => { e.stopPropagation(); modelMenu.classList.toggle('open'); });
+  document.addEventListener('click', (e) => {
+    if (modelMenu?.classList.contains('open') && !modelMenu.contains(e.target)) modelMenu.classList.remove('open');
   });
   const anOp = $('#an-op'); setFill(anOp);
   anOp.addEventListener('input', () => {
@@ -1507,6 +1667,8 @@ async function init() {
   wireControls();
   wireDivider();
   setRenderMode('surface');
+  buildModelMenu();
+  buildAnatomyTree();
   renderOverlay('idle');
   refreshStlEmpty();
   requestAnimationFrame(animate);

@@ -12,12 +12,15 @@ the individually toggleable **segmented tissue layers** on the right — built w
 - **Split, synchronised views** — rotate the eye anatomy and the segmented layers
   in tandem (the **Sync** button mirrors orbit orientation while each view keeps
   its own zoom), or explore them independently.
-- **Per-structure anatomy** — the reference eye is ten separate named structures
-  (cornea, aqueous humour, iris, lens, vitreous humour, sclera, choroid, retina,
-  lamina cribrosa, optic nerve), each independently toggleable, recolourable and
-  sliceable, with *Whole eye* / *Coats* / *Media* presets. Retina, choroid and
-  sclera are tagged `µCT` because the segmentation on the right resolves them
-  too, so the two panes can be read against each other.
+- **Switchable reference eyes** — pick from three published open-source eye
+  models (mesh.eye, the Feel++ CAD eye, and the Upatras OpenSim oculomotor model
+  with its six extraocular muscles). Each is shipped as separate named
+  structures — cornea, iris, lens, vitreous, sclera, choroid, retina, zonules,
+  retinal vessels, lamina cribrosa, optic nerve, extraocular muscles — every one
+  independently toggleable, recolourable, fadeable and sliceable, with
+  per-model presets. Retina, choroid and sclera are tagged `µCT` because the
+  segmentation on the right resolves them too, so the two panes can be read
+  against each other.
 - **On-demand layers** — each segmented structure loads only when toggled, with a
   real progress bar, a cancel control, and recolour / opacity sliders.
 - **Fast by default** — heavy source scans (≈1 GB STL meshes) are decimated and
@@ -45,7 +48,8 @@ python3 -m http.server 8000
 | Parameter  | Purpose                                              |
 |------------|------------------------------------------------------|
 | `?dataset=<url>`  | Load an alternative manifest (CSV).           |
-| `?anatomy=<url>`  | Override the left-pane anatomy model URL.     |
+| `?model=<id>`     | Pick the reference eye: `mesheye`, `humaneye`, `upat`. |
+| `?anatomy=<url>`  | Override the left-pane anatomy model URL outright. |
 
 ---
 
@@ -58,7 +62,7 @@ python3 -m http.server 8000
 | `data-loader.js`  | Loads & parses the dataset manifest; resolves optimized assets. |
 | `asset-loader.js` | Streaming downloads with progress, cancellation & caching. |
 | `optimized/`      | Pre-optimized GLBs that ship with the app.                 |
-| `optimized/anatomy/` | The reference eye model, its provenance and its licence. |
+| `optimized/anatomy/` | The reference eye models, their provenance and licences. |
 
 ### Data
 
@@ -70,27 +74,32 @@ At load time the app prefers an **optimized** copy of each mesh from `optimized/
 (same-origin, tiny) and transparently falls back to the original on Hugging Face
 if an optimized copy is not present. The Hugging Face data is never modified.
 
-### Reference eye anatomy
+### Reference eye models
 
-The left pane is **not** NASA data. It is
-[feelpp/mesh.eye](https://github.com/feelpp/mesh.eye) — *A 3D geometrical model
-and meshing procedures for the human eyeball* (Chabannes, Prud'homme, Saigre,
-Sala, Szopos & Trophime; [doi:10.5281/zenodo.13829740](https://doi.org/10.5281/zenodo.13829740)) —
-whose `Eye.step` solid model is tessellated into ten watertight per-structure
-meshes and shipped as a single 352 KB Draco glTF. Note it is a **human** eye
-while the segmented scan is **mouse**; the model is there for orientation, not
-for morphometric comparison.
+The left pane is **not** NASA data — it is a published open-source eye model,
+shown for orientation:
 
-mesh.eye is **GPL-3.0**, so the derived meshes under `optimized/anatomy/` are
-GPL-3.0 too and carry their own `LICENSE`. The viewer's own code stays MIT — the
-two are merely aggregated. See
+| id | Model | Structures | Licence |
+|----|-------|-----------:|---------|
+| `mesheye`  | [feelpp/mesh.eye](https://github.com/feelpp/mesh.eye) — *A 3D geometrical model and meshing procedures for the human eyeball* ([doi:10.5281/zenodo.13829740](https://doi.org/10.5281/zenodo.13829740)) | 10 | GPL-3.0 |
+| `humaneye` | The SolidWorks CAD eye that mesh.eye derives from; adds zonules and retinal vessels | 10 | GPL-3.0 |
+| `upat`     | [Upatras OpenSim oculomotor model](https://simtk.org/projects/eye) ([arXiv:1807.07332](https://arxiv.org/abs/1807.07332)) — globe + six extraocular muscles | 8 | CC BY 4.0 |
+
+All three are **human** eyes while the segmented scan is **mouse**; they are
+references for orientation, not for morphometric comparison. The model menu also
+lists the projects surveyed that ship no 3D geometry (ISETBio, OpenRetina,
+V-Cornea, OpenEyeSim, pulse2percept, Open Source Brain), disabled and with the
+reason, rather than hiding them.
+
+The models keep their upstream licences and are merely aggregated with the
+viewer's MIT code. Full provenance, structure tables and licences:
 [`optimized/anatomy/README.md`](optimized/anatomy/README.md).
 
 ### Regenerating optimized assets
 
 The optimized GLBs are produced from the source meshes with
 [`gltf-transform`](https://gltf-transform.dev/) (decimation + Draco compression);
-the anatomy model is rebuilt from mesh.eye with
+the eye models are rebuilt from their upstream sources with
 [`tools/optimize/anatomy/build-anatomy.sh`](tools/optimize/anatomy/build-anatomy.sh).
 See [`tools/optimize/`](tools/optimize) for the pipeline.
 
@@ -111,9 +120,10 @@ This is a static site; it deploys as-is to any static host.
 
 - [Three.js](https://threejs.org/) · [STLLoader](https://threejs.org/docs/#examples/en/loaders/STLLoader) · [GLTFLoader](https://threejs.org/docs/#examples/en/loaders/GLTFLoader) · [OrbitControls](https://threejs.org/docs/#examples/en/controls/OrbitControls)
 - Source scans produced with [3D Slicer](https://www.slicer.org/) and hosted on [Hugging Face](https://huggingface.co/datasets).
-- Reference eye anatomy from [feelpp/mesh.eye](https://github.com/feelpp/mesh.eye), tessellated with [gmsh](https://gmsh.info).
+- Reference eye models from [feelpp/mesh.eye](https://github.com/feelpp/mesh.eye) and the [Upatras OpenSim oculomotor model](https://gitlab.com/mitkof6/upat_eye_model), tessellated with [gmsh](https://gmsh.info).
 
 ## License
 
-MIT © 2025 — except `optimized/anatomy/`, which is GPL-3.0 (see
-[`optimized/anatomy/LICENSE`](optimized/anatomy/LICENSE)).
+MIT © 2025 — except the eye models under `optimized/anatomy/`, which keep their
+upstream licences (GPL-3.0 and CC BY 4.0). See
+[`optimized/anatomy/README.md`](optimized/anatomy/README.md).

@@ -1,37 +1,46 @@
 #!/usr/bin/env bash
-# Rebuild optimized/anatomy/eye-anatomy.glb from feelpp/mesh.eye.
+# Rebuild every reference eye model under optimized/anatomy/.
 #
-#   ./build-anatomy.sh [work_dir]
+#   ./build-anatomy.sh [work_dir] [model ...]
 #
-# Tessellates mesh.eye's `Eye.step` into one watertight mesh per anatomical
-# solid, packs them into a single glTF with one named node each, then
-# Draco-compresses. Result: ~147k triangles, ~350 KB.
+# Clones each upstream source, tessellates / sweeps it into one watertight mesh
+# per anatomical structure, packs each model into a glTF with one named node per
+# structure, then Draco-compresses.
 #
-# Requires: python3 with `gmsh trimesh numpy networkx` (pip), and the
+#   mesheye   feelpp/mesh.eye  Eye.step      10 structures  ~352 KB  GPL-3.0
+#   humaneye  feelpp/mesh.eye  human_eye.stp 10 structures  ~360 KB  GPL-3.0
+#   upat      Upatras OpenSim oculomotor      8 structures  ~30 KB   CC BY 4.0
+#
+# Requires: python3 with `gmsh trimesh numpy networkx` (pip), git, and the
 # gltf-transform CLI (`npm i -g @gltf-transform/cli`).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-OUT="$HERE/../../../optimized/anatomy/eye-anatomy.glb"
+DEST="$HERE/../../../optimized/anatomy"
 WORK="${1:-$HERE/work}"
+shift || true
 
-mkdir -p "$WORK"
-if [ ! -d "$WORK/mesh.eye" ]; then
-  echo "1/5  clone feelpp/mesh.eye (GPL-3.0)"
-  git clone --depth 1 https://github.com/feelpp/mesh.eye.git "$WORK/mesh.eye"
-fi
+mkdir -p "$WORK/src" "$DEST"
 
-echo "2/5  tessellate Eye.step -> one mesh per solid"
-python3 "$HERE/extract_eye.py" "$WORK/mesh.eye/Eye.step" "$WORK/parts" 500
+clone() {   # clone <url> <dir>
+  [ -d "$WORK/src/$2" ] || { echo "  clone $1"; git clone --depth 1 -q "$1" "$WORK/src/$2"; }
+}
+echo "1/4  fetch sources"
+clone https://github.com/feelpp/mesh.eye.git            mesh.eye
+clone https://gitlab.com/mitkof6/upat_eye_model.git     upat_eye_model
 
-echo "3/5  assemble named + coloured glTF"
-python3 "$HERE/build_glb.py" "$WORK/parts" "$WORK/raw.glb"
+echo "2/4  build meshes"
+python3 "$HERE/build_models.py" "$WORK/src" "$WORK/out" "$@"
 
-echo "4/5  Draco compress"
-gltf-transform draco "$WORK/raw.glb" "$OUT"
+echo "3/4  Draco compress"
+for f in "$WORK"/out/*.glb; do
+  gltf-transform draco "$f" "$DEST/$(basename "$f")" >/dev/null
+  printf '  %-24s %s\n' "$(basename "$f")" "$(du -h "$DEST/$(basename "$f")" | cut -f1)"
+done
 
-echo "5/5  refresh the licence + provenance shipped beside it"
-cp "$WORK/mesh.eye/LICENSE" "$(dirname "$OUT")/LICENSE"
-cp "$WORK/parts/manifest.json" "$(dirname "$OUT")/structures.json"
+echo "4/4  refresh licences + structure manifest"
+cp "$WORK/src/mesh.eye/LICENSE"       "$DEST/LICENSE-mesh.eye-GPL-3.0.txt"
+cp "$WORK/src/upat_eye_model/LICENSE" "$DEST/LICENSE-upat-CC-BY-4.0.txt"
+cp "$WORK/out/structures.json"        "$DEST/structures.json"
 
-echo "done -> $OUT ($(du -h "$OUT" | cut -f1))"
+echo "done -> $DEST"
