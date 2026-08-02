@@ -61,11 +61,37 @@ export function fileKind(url = '') {
  * @param {string} [csvUrl]
  * @returns {Promise<typeof samplesData>}
  */
+/**
+ * Fetch the manifest, retrying on failure.
+ *
+ * Hugging Face's edge answers the *first*, cold request for the manifest path
+ * with `405 Method Not Allowed` instead of following its own redirect, and only
+ * serves the file on a retry — reproducibly, on a fresh browser profile, for
+ * both `fetch(url)` and `fetch(url, {mode:'cors'})`. Without this every new
+ * visitor lands on an empty layer tree; the second attempt essentially always
+ * succeeds.
+ */
+async function fetchManifest(url, tries = 4) {
+  let lastStatus = 0, lastErr = null;
+  for (let i = 0; i < tries; i++) {
+    try {
+      const res = await fetch(url, { mode: 'cors' });
+      if (res.ok) return res;
+      lastStatus = res.status;
+    } catch (err) {
+      lastErr = err;
+    }
+    await new Promise((r) => setTimeout(r, 200 * 2 ** i));
+  }
+  throw new Error(lastStatus
+    ? `Could not load dataset manifest (HTTP ${lastStatus}).`
+    : `Could not load dataset manifest. ${lastErr?.message || ''}`.trim());
+}
+
 export async function loadCSVData(csvUrl) {
   const url = csvUrl || new URLSearchParams(location.search).get('dataset') || DEFAULT_CSV_URL;
 
-  const res = await fetch(url, { mode: 'cors' });
-  if (!res.ok) throw new Error(`Could not load dataset manifest (HTTP ${res.status}).`);
+  const res = await fetchManifest(url);
   const text = await res.text();
 
   const lines = text.replace(/\r/g, '').trim().split('\n').filter((l) => l.trim());
