@@ -26,13 +26,20 @@ Normals are intentionally dropped and recomputed in the browser after decimation
 
 ## Anatomy GLB
 
-The anatomy model is texture-dominated, so geometry simplification is disabled and
-textures are recompressed to WebP:
+The left-pane reference eye is generated from
+[feelpp/mesh.eye](https://github.com/feelpp/mesh.eye) rather than shipped as an
+artist model, so each anatomical structure is a separate named, watertight mesh
+the viewer can toggle, recolour and slice independently:
 
 ```bash
-gltf-transform optimize original/eye-anatomy.glb ../../optimized/eye-anatomy.glb \
-  --simplify false --compress draco --texture-compress webp --texture-size 4096
+./anatomy/build-anatomy.sh
 ```
+
+That clones mesh.eye, tessellates its `Eye.step` solid model with gmsh's
+OpenCASCADE kernel, assembles the ten structures into one glTF with a named node
+each, and Draco-compresses. See
+[`../../optimized/anatomy/README.md`](../../optimized/anatomy/README.md) for
+provenance, the structure table, and the GPL-3.0 licence that covers the output.
 
 ## Results
 
@@ -40,7 +47,11 @@ gltf-transform optimize original/eye-anatomy.glb ../../optimized/eye-anatomy.glb
 |-------------------|---------:|----------:|----------:|
 | `eye.stl`         | 1008 MB  | 0.6 MB    | ~1600×    |
 | `feature.stl`     | 149 MB   | 0.3 MB    | ~450×     |
-| `eye-anatomy.glb` | 137 MB   | 7.2 MB    | ~19×      |
+| `eye-anatomy.glb` | 2.6 MB¹  | 0.35 MB   | ~7.5×     |
+
+¹ From the tessellated `Eye.step`. This replaced a 137 MB texture-dominated
+artist model that optimized to 7.2 MB / 2.68 M triangles — the current one is
+**20× smaller and 18× lighter** (147 k triangles), and is per-structure.
 
 > `original/` and `out/` are git-ignored — download the source meshes from the
 > [Hugging Face dataset](https://huggingface.co/datasets/kush1434/awg_retina_tomography_ui)

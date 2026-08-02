@@ -76,6 +76,20 @@
         </div>
       </section>
 
+      <section class="rail-sec" id="anatomy-sec" hidden>
+        <div class="sec-head">
+          <span>ANATOMY</span>
+          <span class="chip-count" id="anatomy-count">0</span>
+        </div>
+        <div class="seg seg-3" id="anatomy-preset">
+          <button class="seg-btn active" data-preset="whole">Whole eye</button>
+          <button class="seg-btn" data-preset="coats">Coats</button>
+          <button class="seg-btn" data-preset="media">Media</button>
+        </div>
+        <div class="seg-desc mono" id="anatomy-preset-desc">Intact globe &middot; clear cornea</div>
+        <div id="anatomy-tree"></div>
+      </section>
+
       <section class="rail-sec rail-grow">
         <div class="sec-head"><span>LAYERS</span><span class="chip-count" id="layer-count">0</span></div>
         <div id="layer-tree"></div>
@@ -219,9 +233,11 @@
     <ul>
       <li><strong>Rotate</strong> drag · <strong>Pan</strong> right-drag · <strong>Zoom</strong> scroll</li>
       <li><strong>Sync</strong> links rotation of both views</li>
+      <li><strong>Anatomy</strong> shows or hides each of the ten structures of the reference eye, and recolours them; the presets are shortcuts (<em>Whole eye</em>, <em>Coats</em>, <em>Media</em>)</li>
       <li><strong>Rendering</strong> switches Surface / Wireframe / Slices</li>
       <li><strong>Slices</strong> cuts the meshes with three orthogonal planes (tri-planar MPR) to reveal interior structure</li>
     </ul>
+    <p>Structures tagged <span class="cite-tag">µCT</span> — retina, choroid, sclera — are resolved in <em>both</em> panes, so the reference anatomy and the segmented scan can be read against each other.</p>
     <h3>Data</h3>
     <p>Heavy source scans are decimated and Draco-compressed, cached in your browser, and stream with a progress bar. The Hugging Face dataset is unchanged.</p>
     <p class="dialog-foot"><button class="link-btn" id="help-to-about">About &amp; citations →</button></p>
@@ -257,8 +273,25 @@
       <a href="https://huggingface.co/datasets/kush1434/awg_retina_tomography_ui" target="_blank" rel="noopener">Hugging Face ↗</a>.
     </p>
 
+    <h3>Reference eye anatomy</h3>
+    <p class="cite">
+      The whole-eye model in the left pane is <strong>not</strong> NASA data — it is a published human
+      eyeball geometry shown for orientation. Chabannes, V., Prud'homme, C., Saigre, T., Sala, L.,
+      Szopos, M., &amp; Trophime, C. <em>A 3D geometrical model and meshing procedures for the human
+      eyeball</em> (Cemosis, IRMA UMR 7501, Université de Strasbourg, CNRS) —
+      <a href="https://github.com/feelpp/mesh.eye" target="_blank" rel="noopener">feelpp/mesh.eye ↗</a>,
+      <a href="https://doi.org/10.5281/zenodo.13829740" target="_blank" rel="noopener">doi:10.5281/zenodo.13829740</a>.
+      Model described in Sala, L., Prud'homme, C., Guidoboni, G., Szopos, M., &amp; Harris, A.,
+      <em>Int J Numer Meth Biomed Engng</em> 2024; 40(2):e3791.
+      Its <code>Eye.step</code> solid model was tessellated into ten watertight structures
+      (cornea, aqueous humour, iris, lens, vitreous humour, sclera, choroid, retina, lamina cribrosa,
+      optic nerve). Note it is a <strong>human</strong> eye, while the segmented scan is
+      <strong>mouse</strong> — the three coats tagged <span class="cite-tag">µCT</span> are the ones
+      resolved in both. Licensed GPL-3.0, separately from this viewer's MIT code.
+    </p>
+
     <h3>Acknowledgements</h3>
-    <p class="cite">Rendering with <a href="https://threejs.org" target="_blank" rel="noopener">Three.js</a> (STL / glTF loaders, OrbitControls). Meshes decimated &amp; Draco-compressed with <a href="https://gltf-transform.dev" target="_blank" rel="noopener">glTF-Transform</a>.</p>
+    <p class="cite">Rendering with <a href="https://threejs.org" target="_blank" rel="noopener">Three.js</a> (STL / glTF loaders, OrbitControls). Meshes tessellated with <a href="https://gmsh.info" target="_blank" rel="noopener">gmsh</a>, decimated &amp; Draco-compressed with <a href="https://gltf-transform.dev" target="_blank" rel="noopener">glTF-Transform</a>.</p>
   </div>
 </dialog>
 
