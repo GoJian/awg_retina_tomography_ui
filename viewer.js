@@ -115,13 +115,14 @@ const ANATOMY_MODELS = [
         opacity: { globe: 0.3, pupil: 0.6 } },
     },
   },
-  // Surveyed, but they ship no 3D anatomical geometry to render.
-  { id: 'isetbio',    label: 'ISETBio',          unavailable: 'MATLAB optics & photoreceptor simulation — no anatomical mesh' },
-  { id: 'openretina', label: 'OpenRetina',       unavailable: 'Data-driven retinal response networks — no geometry' },
-  { id: 'vcornea',    label: 'V-Cornea',         unavailable: 'Agent-based corneal epithelium on a cell lattice — no eye mesh' },
-  { id: 'openeyesim', label: 'OpenEyeSim',       unavailable: 'Superseded by the Upatras model above; no public geometry' },
-  { id: 'p2p',        label: 'pulse2percept',    unavailable: 'Retinal-implant & percept simulation — electrode arrays, not an eye' },
-  { id: 'osb',        label: 'Open Source Brain', unavailable: 'NeuroML neuron models — single cells, not ocular anatomy' },
+  // Surveyed, but none ships 3D eye geometry. Reasons are the checked facts,
+  // not guesses — see optimized/anatomy/README.md for how each was verified.
+  { id: 'isetbio',    label: 'ISETBio',          unavailable: 'MATLAB optics + cone mosaic. Zero mesh files in the repo' },
+  { id: 'openretina', label: 'OpenRetina',       unavailable: 'Networks predicting retinal spike responses. Nothing spatial' },
+  { id: 'vcornea',    label: 'V-Cornea',         unavailable: 'Corneal epithelium on a 200×90 lattice — 2D, z=0 for all 12,085 cells' },
+  { id: 'openeyesim', label: 'OpenEyeSim',       unavailable: 'No public download; the authors distribute it by email' },
+  { id: 'p2p',        label: 'pulse2percept',    unavailable: 'Implant electrode arrays (250 µm discs), not eye anatomy' },
+  { id: 'osb',        label: 'Open Source Brain', unavailable: 'NeuroML single-neuron morphologies, not ocular anatomy' },
 ];
 
 const DEFAULT_MODEL_ID = 'mesheye';

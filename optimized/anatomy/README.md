@@ -107,14 +107,19 @@ proper rotation, so it stays a right eye) to match the others.
 These are listed, disabled, in the model menu rather than hidden, so it is clear
 they were considered. None ships 3D anatomical geometry:
 
-| Project | Why not |
-|---------|---------|
-| ISETBio | MATLAB scene→retinal-image optics and photoreceptor simulation; no anatomical mesh |
-| OpenRetina | Data-driven networks predicting retinal responses; no geometry |
-| V-Cornea | Agent-based corneal epithelium on a CompuCell3D cell lattice; cell-scale, no eye mesh |
-| OpenEyeSim | Older extraocular-muscle work superseded by the Upatras model; no public geometry |
-| pulse2percept | Retinal-implant and percept simulation; electrode arrays, not an eye |
-| Open Source Brain | NeuroML single-neuron models; not ocular anatomy |
+| Project | Why not | How that was checked |
+|---------|---------|----------------------|
+| ISETBio | MATLAB scene→retinal-image optics and cone-mosaic simulation. Its "geometry" is a 2D cone packing | Repo tree contains **zero** `.obj/.stl/.ply/.vtp/.glb/.gltf/.step/.stp/.off/.msh` files |
+| OpenRetina | Networks predicting retinal spike responses to stimuli; nothing spatial to draw | Model weights and stimulus/response tensors only |
+| V-Cornea | The published CompuCell3D lattice is **two-dimensional** — a 200 × 90 cross-section of epithelium, not a 3D cornea | Parsed `Epithelium.piff`: 12,085 cell boxes over 9 cell types (BASAL, LIMB, MEMB, STEM, STROMA, SUPER, TEAR, WALL, WING), `z1 = z2 = 0` on every one |
+| OpenEyeSim | Not publicly obtainable. Covers the same ground as the Upatras model, which is public | SimTK project page: *"IF YOU WANT TO GET IT NOW WRITE US AN EMAIL"* — no download files |
+| pulse2percept | Models retinal **implants**, not eyes: its geometry is disc-electrode arrays (`DiskElectrode(r=250 µm, x, y, z)`) | Zero mesh files; electrodes are constructed in code. (Also won't install on Python 3.13 — it needs the removed `numpy.distutils`) |
+| Open Source Brain | NeuroML single-neuron morphologies — a ganglion cell, not ocular anatomy | Morphology files describe soma + dendrite segments |
+
+Three of these could contribute a *non-eye* 3D object if that were ever wanted —
+a pulse2percept electrode array sitting on the retina, an ISETBio cone-mosaic
+patch, or an Open Source Brain ganglion-cell morphology. They would be overlays
+on an eye rather than eye models, so they are not offered as choices here.
 
 ---
 
