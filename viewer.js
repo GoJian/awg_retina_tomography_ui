@@ -11,17 +11,122 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-import { loadCSVData, probeSizes, resolveStructure, samplesData, formatBytes } from './data-loader.js';
-import { fetchBuffer, isCached, clearCache } from './asset-loader.js';
+import { loadCSVData, probeSizes, resolveStructure, samplesData, formatBytes } from './data-loader.js?v=7';
+import { fetchBuffer, isCached, clearCache } from './asset-loader.js?v=7';
 
 // ---------------------------------------------------------------------------
 //  Config
 // ---------------------------------------------------------------------------
 const HF_BASE = 'https://huggingface.co/datasets/kush1434/awg_retina_tomography_ui/resolve/main';
-const ANATOMY_OPTIMIZED = 'optimized/eye-anatomy.glb';
-const ANATOMY_ORIGINAL = `${HF_BASE}/eye-anatomy.glb`;
 const HEAVY_BYTES = 400 * 1024 * 1024;
 const PLANE_COLORS = { x: 0x7bd88f, y: 0xebb46e, z: 0x78aaeb };  // sagittal / axial / coronal
+
+// ---------------------------------------------------------------------------
+//  Reference eye models
+// ---------------------------------------------------------------------------
+// The left pane can show any of several published open-source eye models. Each
+// ships as one Draco glTF with a named node per anatomical structure — see
+// optimized/anatomy/README.md for provenance and licences.
+//
+// Per structure: `key` matches the glTF node name. `coat` marks the structures
+// the µCT segmentation on the right also resolves, so the two panes can be read
+// against each other. `depth` is how deeply nested the structure sits
+// (0 = outermost); translucent shells are drawn back-faces outermost-in, then
+// front-faces innermost-out, which is what makes them blend in the right order.
+//
+// Models flagged `unavailable` are the remaining projects surveyed for this
+// pane. They are listed rather than hidden so it is clear they were considered
+// and why they cannot be rendered — they are simulation code or data-driven
+// models that ship no 3D anatomical geometry at all.
+
+// The cornea and aqueous are all but colourless in life; tinting them any
+// harder than this fogs the iris behind them to grey.
+const S = {
+  sclera:      { label: 'Sclera',                 group: 'Ocular coats',      color: 0xc6c0b2, opacity: 1.00, rough: 0.52, depth: 0, coat: true },
+  choroid:     { label: 'Choroid',                group: 'Ocular coats',      color: 0x8e2b3c, opacity: 1.00, rough: 0.58, depth: 1, coat: true },
+  retina:      { label: 'Retina',                 group: 'Ocular coats',      color: 0xd9634c, opacity: 1.00, rough: 0.62, depth: 2, coat: true },
+  cornea:      { label: 'Cornea',                 group: 'Anterior segment',  color: 0xd6edf5, opacity: 0.15, rough: 0.05, depth: 0 },
+  aqueous:     { label: 'Aqueous humour',         group: 'Anterior segment',  color: 0xd8f0f8, opacity: 0.05, rough: 0.05, depth: 1 },
+  iris:        { label: 'Iris',                   group: 'Anterior segment',  color: 0x8a5626, opacity: 1.00, rough: 0.70, depth: 2 },
+  zonules:     { label: 'Suspensory ligament',    group: 'Anterior segment',  color: 0xe6dfc9, opacity: 0.85, rough: 0.35, depth: 3 },
+  lens:        { label: 'Lens',                   group: 'Anterior segment',  color: 0xefdaa6, opacity: 0.82, rough: 0.10, depth: 3 },
+  vitreous:    { label: 'Vitreous humour',        group: 'Posterior segment', color: 0xbfe2f0, opacity: 0.09, rough: 0.08, depth: 3 },
+  lamina:      { label: 'Lamina cribrosa',        group: 'Optic nerve head',  color: 0x8fbe9a, opacity: 1.00, rough: 0.62, depth: 3 },
+  optic_nerve: { label: 'Optic nerve',            group: 'Optic nerve head',  color: 0xded3b8, opacity: 1.00, rough: 0.66, depth: 1 },
+  artery:      { label: 'Central retinal artery', group: 'Retinal vessels',   color: 0xc62f2f, opacity: 1.00, rough: 0.55, depth: 2 },
+  vein:        { label: 'Retinal vein',           group: 'Retinal vessels',   color: 0x4a5aa8, opacity: 1.00, rough: 0.55, depth: 2 },
+  globe:       { label: 'Globe (sclera)',         group: 'Globe',             color: 0xc6c0b2, opacity: 1.00, rough: 0.52, depth: 0, coat: true },
+  pupil:       { label: 'Cornea / pupil',         group: 'Globe',             color: 0x2b2f36, opacity: 1.00, rough: 0.30, depth: 1 },
+};
+// Anything not in S is an extraocular muscle, given as [key, label].
+const muscle = (label) => ({ label, group: 'Extraocular muscles', color: 0xb84540, opacity: 1.00, rough: 0.66, depth: 0 });
+const struct = (keys) => keys.map((k) => (Array.isArray(k)
+  ? { key: k[0], ...muscle(k[1]) }
+  : { key: k, ...S[k] }));
+
+const ANATOMY_MODELS = [
+  {
+    id: 'mesheye',
+    label: 'mesh.eye',
+    blurb: 'Human eyeball · 10 structures incl. lamina cribrosa',
+    url: 'optimized/anatomy/eye-anatomy.glb',
+    source: 'feelpp/mesh.eye', href: 'https://github.com/feelpp/mesh.eye', license: 'GPL-3.0', focus: 'sclera',
+    structures: struct(['sclera', 'choroid', 'retina', 'cornea', 'aqueous', 'iris', 'lens', 'vitreous', 'lamina', 'optic_nerve']),
+    presets: {
+      whole: { label: 'Whole eye', desc: 'Intact globe · clear cornea', hidden: [], opacity: {} },
+      coats: { label: 'Coats', desc: 'The three coats the µCT segments',
+        hidden: ['cornea', 'aqueous', 'iris', 'lens', 'vitreous'],
+        opacity: { sclera: 0.26, choroid: 0.62, retina: 1 } },
+      media: { label: 'Media', desc: 'The optical path, coats faded back', hidden: [],
+        opacity: { sclera: 0.10, choroid: 0.12, retina: 0.16, cornea: 0.45, aqueous: 0.26, vitreous: 0.2, lens: 0.95, iris: 1, optic_nerve: 0.5 } },
+    },
+  },
+  {
+    id: 'humaneye',
+    label: 'Feel++ CAD eye',
+    blurb: 'The CAD eye mesh.eye derives from · adds zonules & vessels',
+    url: 'optimized/anatomy/human-eye-cad.glb',
+    source: 'feelpp/mesh.eye', href: 'https://github.com/feelpp/mesh.eye', license: 'GPL-3.0', focus: 'sclera',
+    structures: struct(['sclera', 'choroid', 'retina', 'cornea', 'iris', 'zonules', 'lens', 'vitreous', 'artery', 'vein']),
+    presets: {
+      whole: { label: 'Whole eye', desc: 'Intact globe · clear cornea', hidden: [], opacity: {} },
+      coats: { label: 'Coats', desc: 'The three coats the µCT segments',
+        hidden: ['cornea', 'iris', 'zonules', 'lens', 'vitreous'],
+        opacity: { sclera: 0.26, choroid: 0.62, retina: 1, artery: 1, vein: 1 } },
+      media: { label: 'Media', desc: 'The optical path, coats faded back', hidden: [],
+        opacity: { sclera: 0.10, choroid: 0.12, retina: 0.16, cornea: 0.45, vitreous: 0.2, lens: 0.95, iris: 1, zonules: 1 } },
+    },
+  },
+  {
+    id: 'upat',
+    label: 'Upatras oculomotor',
+    blurb: 'Globe + the six extraocular muscles',
+    url: 'optimized/anatomy/upat-oculomotor.glb',
+    source: 'Upatras eye model', href: 'https://simtk.org/projects/eye', license: 'CC BY 4.0', focus: 'globe',
+    structures: struct(['globe', 'pupil',
+      ['lateral_rectus', 'Lateral rectus'], ['medial_rectus', 'Medial rectus'],
+      ['superior_rectus', 'Superior rectus'], ['inferior_rectus', 'Inferior rectus'],
+      ['superior_oblique', 'Superior oblique'], ['inferior_oblique', 'Inferior oblique']]),
+    presets: {
+      whole: { label: 'Whole', desc: 'Globe with all six muscles', hidden: [], opacity: {} },
+      muscles: { label: 'Muscles', desc: 'Muscles over a translucent globe', hidden: [],
+        opacity: { globe: 0.22, pupil: 0.5 } },
+      recti: { label: 'Recti', desc: 'The four recti only', hidden: ['superior_oblique', 'inferior_oblique'],
+        opacity: { globe: 0.3, pupil: 0.6 } },
+    },
+  },
+  // Surveyed, but none ships 3D eye geometry. Reasons are the checked facts,
+  // not guesses — see optimized/anatomy/README.md for how each was verified.
+  { id: 'isetbio',    label: 'ISETBio',          unavailable: 'MATLAB optics + cone mosaic. Zero mesh files in the repo' },
+  { id: 'openretina', label: 'OpenRetina',       unavailable: 'Networks predicting retinal spike responses. Nothing spatial' },
+  { id: 'vcornea',    label: 'V-Cornea',         unavailable: 'Corneal epithelium on a 200×90 lattice — 2D, z=0 for all 12,085 cells' },
+  { id: 'openeyesim', label: 'OpenEyeSim',       unavailable: 'No public download; the authors distribute it by email' },
+  { id: 'p2p',        label: 'pulse2percept',    unavailable: 'Implant electrode arrays (250 µm discs), not eye anatomy' },
+  { id: 'osb',        label: 'Open Source Brain', unavailable: 'NeuroML single-neuron morphologies, not ocular anatomy' },
+];
+
+const DEFAULT_MODEL_ID = 'mesheye';
+const modelById = (id) => ANATOMY_MODELS.find((m) => m.id === id && !m.unavailable);
 
 // ---------------------------------------------------------------------------
 //  DOM
@@ -78,7 +183,7 @@ function createPane(mountEl) {
   const camera = new THREE.PerspectiveCamera(52, 1, 0.01, 1e7);
   camera.position.set(0, 0, 100);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, stencil: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.localClippingEnabled = true;
@@ -117,6 +222,9 @@ function createPane(mountEl) {
   const grid = new THREE.GridHelper(1, 20, 0x2a3340, 0x1a2029);
   grid.visible = false; grid.userData.noClip = true; scene.add(grid);
 
+  // Holds stencil-cap geometry that fills the sliced cross-sections (see buildCaps).
+  const capGroup = new THREE.Group(); capGroup.userData.noClip = true; scene.add(capGroup);
+
   function size() {
     const w = mountEl.clientWidth || 1, h = mountEl.clientHeight || 1;
     renderer.setSize(w, h, false);
@@ -127,13 +235,22 @@ function createPane(mountEl) {
 
   return {
     mountEl, scene, camera, renderer, controls, root,
-    clipPlanes, activeClips: [], sliceGroup, sliceQuads, boxHelper, grid,
-    bounds: new THREE.Box3(), size, defaultDist: 100,
+    clipPlanes, activeClips: [], sliceGroup, sliceQuads, boxHelper, grid, capGroup,
+    bounds: new THREE.Box3(), size, defaultDist: 100, capsEnabled: false,
   };
 }
 
 const glb = createPane(glbPane);
 const stl = createPane(stlPane);
+stl.capsEnabled = true;   // the segmented-coat pane gets solid cross-section caps when sliced
+
+// The shared key light sits behind and to the right of the subject, which suits
+// the µCT coats but leaves the anatomy's interior — iris, lens, the inside of
+// the cornea — lit only by ambient, washing their colour out to grey. Give the
+// anatomy pane a soft headlight that tracks its camera, so whichever side you
+// orbit to is the side that's lit.
+glb.headLight = new THREE.DirectionalLight(0xfff6e8, 0.55);
+glb.scene.add(glb.headLight);
 const panes = [glb, stl];
 
 // The STL pane is the "overlay workspace": every sample is a normalised group
@@ -216,7 +333,8 @@ function placeAnatomy() {
   } else {
     if (anatomyGroup.parent) stl.root.remove(anatomyGroup);
     glb.root.add(anatomyObject);
-    fitToObject(glb, anatomyObject, 1.5);
+    fitBox(glb, anatomyFocusBox(), 1.75, ANATOMY_VIEW_DIR);
+    updateBounds(glb);
     applyRenderModeToPane(glb);
   }
 }
@@ -242,20 +360,26 @@ function setLayout(mode) {
 // ---------------------------------------------------------------------------
 //  Camera framing
 // ---------------------------------------------------------------------------
-function fitBox(pane, box, offset = 1.45) {
+function fitBox(pane, box, offset = 1.45, dir = null) {
   if (box.isEmpty()) return;
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
   const maxDim = Math.max(size.x, size.y, size.z) || 1;
 
-  const fov = pane.camera.fov * (Math.PI / 180);
-  const dist = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * offset;
+  // Fit the model's enclosing sphere against whichever field of view is the
+  // tighter one. Honouring the *horizontal* FOV matters because these panes are
+  // tall and narrow: fitting only the vertical FOV — as this did originally —
+  // crops anything wider than it is tall, like the eye plus its optic nerve.
+  // `offset` keeps its old meaning, 1.45 being a snug fit.
+  const vFov = pane.camera.fov * (Math.PI / 180);
+  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * (pane.camera.aspect || 1));
+  const dist = ((maxDim / 2) / Math.sin(Math.min(vFov, hFov) / 2)) * (offset / 1.45);
 
   pane.camera.near = Math.max(maxDim / 1000, 0.001);
   pane.camera.far = maxDim * 1000;
   pane.camera.updateProjectionMatrix();
   pane.controls.target.copy(center);
-  pane.camera.position.copy(center).add(new THREE.Vector3(0, 0, dist));
+  pane.camera.position.copy(center).add((dir ? dir.clone().normalize() : new THREE.Vector3(0, 0, 1)).multiplyScalar(dist));
   pane.controls.update();
   pane.defaultDist = dist;
 }
@@ -275,6 +399,23 @@ function stlWorkspaceBox() {
   if (box.isEmpty()) box.setFromObject(stl.root);
   return box;
 }
+// Frame the left pane on the globe rather than on everything: the optic nerve
+// runs ~8 mm past the sclera, and fitting that whole extent shrinks the eye
+// itself. Padded a little so the nerve still reads as it leaves the frame.
+// Open on a three-quarter anterior view: the model's cornea sits at -X, so
+// looking in from -X (and a little above and to the front) puts the cornea,
+// iris and pupil facing the viewer. A straight lateral view just shows a
+// featureless white globe.
+const ANATOMY_VIEW_DIR = new THREE.Vector3(-0.72, 0.26, 0.64);
+
+function anatomyFocusBox() {
+  const box = new THREE.Box3();
+  const globe = anatomyParts.get('sclera');
+  if (globe && globe.visible) box.setFromObject(globe);
+  if (box.isEmpty() && anatomyObject) box.setFromObject(anatomyObject);
+  return box;
+}
+
 function fitStl(offset = 1.45) {
   const box = stlWorkspaceBox();
   if (box.isEmpty()) return;
@@ -284,6 +425,7 @@ function fitStl(offset = 1.45) {
 
 function resetPane(pane) {
   if (pane === stl) fitStl(layout === 'overlay' ? 1.7 : 1.45);
+  else if (anatomyParts.size) fitBox(pane, anatomyFocusBox(), 1.75, ANATOMY_VIEW_DIR);
   else if (pane.root.children.length) fitToObject(pane, pane.root);
 }
 function resetAll() { panes.forEach(resetPane); }
@@ -345,12 +487,93 @@ function applyRenderModeToPane(pane) {
       m.wireframe = renderMode === 'wireframe';
       m.clippingPlanes = slicing && pane.activeClips.length ? pane.activeClips : null;
       m.clipIntersection = false;
-      m.side = THREE.DoubleSide;
+      // Anatomy shells manage their own side: translucent ones are split into a
+      // BackSide and a FrontSide pass so they blend in the correct order.
+      if (!m.userData?.anatomy) m.side = THREE.DoubleSide;
       m.needsUpdate = true;
     }
   });
+  buildCaps(pane);
 }
 function applyRenderModeAll() { panes.forEach(applyRenderModeToPane); }
+
+// ---------------------------------------------------------------------------
+//  Clip-plane capping
+// ---------------------------------------------------------------------------
+// A sliced mesh is a hollow open shell: at the cut you see straight through it,
+// so adjacent coats read as separated by dark seams. For the (common) single
+// active plane, fill each coat's cross-section with a stencil-masked colored
+// quad so the cut renders as a solid, gap-free surface. Standard three.js
+// stencil-cap technique (back faces increment, front faces decrement, cap drawn
+// where the count != 0), one group per coat so each keeps its own colour.
+const _capQuadGeom = new THREE.PlaneGeometry(1, 1);
+function stencilMat(side, op, plane) {
+  const m = new THREE.MeshBasicMaterial();
+  m.depthWrite = false; m.depthTest = false; m.colorWrite = false;
+  m.side = side; m.clippingPlanes = [plane];
+  m.stencilWrite = true; m.stencilFunc = THREE.AlwaysStencilFunc;
+  m.stencilFail = op; m.stencilZFail = op; m.stencilZPass = op;
+  return m;
+}
+function clearCaps(pane) {
+  const g = pane.capGroup;
+  if (!g) return;
+  for (const c of g.children) {
+    const ms = Array.isArray(c.material) ? c.material : [c.material];
+    ms.forEach((m) => m && m.dispose());
+  }
+  g.clear();
+}
+function buildCaps(pane) {
+  if (!pane.capsEnabled) return;
+  clearCaps(pane);
+  // Caps belong to Solid fill; with it off the slice view stays the original
+  // uncapped coats. Cap only the single-plane case (the default); >1 plane uncapped.
+  if (!solidFill || renderMode !== 'slices' || pane.activeClips.length !== 1) return;
+  const plane = pane.activeClips[0];
+
+  pane.root.updateWorldMatrix(true, true);
+  const coats = [];
+  pane.root.traverse((o) => {
+    if (!o.isMesh || o.userData.noClip || !o.geometry || !o.material) return;
+    if (o.userData.anatomyBackOf) return;   // duplicate of its parent's geometry
+    let vis = o.visible, p = o.parent;
+    while (vis && p) { vis = p.visible; p = p.parent; }
+    if (!vis) return;
+    const mat = Array.isArray(o.material) ? o.material[0] : o.material;
+    coats.push({ mesh: o, color: mat.color });
+  });
+  if (!coats.length) return;
+
+  const size = pane.bounds.getSize(new THREE.Vector3());
+  const capSize = (Math.max(size.x, size.y, size.z) || 1) * 2.4;
+  const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), plane.normal.clone().normalize());
+  const pos = plane.normal.clone().multiplyScalar(-plane.constant);
+
+  let order = 100;
+  for (const { mesh, color } of coats) {
+    for (const [side, op] of [[THREE.BackSide, THREE.IncrementWrapStencilOp], [THREE.FrontSide, THREE.DecrementWrapStencilOp]]) {
+      const s = new THREE.Mesh(mesh.geometry, stencilMat(side, op, plane));
+      s.matrixAutoUpdate = false; s.matrixWorldAutoUpdate = false;
+      s.matrix.copy(mesh.matrixWorld); s.matrixWorld.copy(mesh.matrixWorld);
+      s.renderOrder = order; s.frustumCulled = false; s.userData.noClip = true;
+      pane.capGroup.add(s);
+    }
+    const capMat = new THREE.MeshBasicMaterial({ color: color.clone(), side: THREE.DoubleSide });
+    capMat.stencilWrite = true; capMat.stencilRef = 0; capMat.stencilFunc = THREE.NotEqualStencilFunc;
+    capMat.stencilFail = THREE.ReplaceStencilOp; capMat.stencilZFail = THREE.ReplaceStencilOp; capMat.stencilZPass = THREE.ReplaceStencilOp;
+    capMat.polygonOffset = true; capMat.polygonOffsetFactor = -order; capMat.polygonOffsetUnits = -1;
+    const cap = new THREE.Mesh(_capQuadGeom, capMat);
+    cap.scale.set(capSize, capSize, 1);
+    cap.quaternion.copy(quat);
+    cap.position.copy(pos);
+    cap.renderOrder = order + 1;
+    cap.frustumCulled = false; cap.userData.noClip = true;
+    cap.onAfterRender = (r) => r.clearStencil();
+    pane.capGroup.add(cap);
+    order += 3;
+  }
+}
 
 function setRenderMode(mode) {
   renderMode = mode;
@@ -395,6 +618,9 @@ const stlToGlb = () => mirror(stl, glb);
 function setSync(on) {
   syncEnabled = on;
   btnSync.setAttribute('aria-pressed', String(on));
+  document.body.classList.toggle('synced', on);
+  const label = btnSync.querySelector('.sync-toggle-label');
+  if (label) label.textContent = on ? 'Synced' : 'Sync views';
   if (on) {
     glb.controls.addEventListener('change', glbToStl);
     stl.controls.addEventListener('change', stlToGlb);
@@ -444,14 +670,53 @@ const featureObjects = new Map();
 const rowRefs = new Map();
 const inFlight = new Map();
 
+// "Solid fill" mode: swap the F10 ocular coats for their solid-slab variant,
+// which fills each coat inward to the next coat (no gaps, no hollow shells).
+// The variant meshes ship alongside the normal ones under optimized/<dir>_solid/.
+let solidFill = false;  // default OFF: show the original individual coats; toggle on for the filled+capped view
+function solidVariant(path) {
+  // Map any F10 coat path (remote HF original or local optimized) to the
+  // locally-shipped solid-fill slab, so the toggle works regardless of source.
+  const m = path && path.match(/F10_layers\/([^/?#]+\.glb)/i);
+  return m ? `optimized/F10_layers_solid/${m[1]}` : null;
+}
+function effectivePath(structure) {
+  if (solidFill) { const v = solidVariant(structure.path); if (v) return v; }
+  return structure.path;
+}
+function disposeObject(obj) {
+  obj.traverse((c) => {
+    if (c.isMesh) { c.geometry?.dispose(); if (Array.isArray(c.material)) c.material.forEach((m) => m.dispose()); else c.material?.dispose(); }
+  });
+}
+// Reload every currently-loaded F10 coat from the active variant, preserving
+// each row's visibility. Called when the Solid-fill toggle flips.
+async function reloadFillVariants() {
+  const affected = [...featureObjects.keys()]
+    .map((id) => findStructure(id))
+    .filter((st) => st && solidVariant(st.path));
+  clearCaps(stl);   // drop caps that reference geometry we're about to dispose
+  for (const st of affected) {
+    const obj = featureObjects.get(st.id);
+    const wasVisible = !!obj && obj.visible;
+    if (inFlight.has(st.id)) inFlight.get(st.id).abort();
+    if (obj) { obj.parent?.remove(obj); disposeObject(obj); featureObjects.delete(st.id); }
+    await loadLayer(st);
+    const fresh = featureObjects.get(st.id);
+    if (fresh) fresh.visible = wasVisible;
+  }
+  refreshStlEmpty();
+}
+
 async function loadLayer(structure) {
   const refs = rowRefs.get(structure.id);
+  const url = effectivePath(structure);
   const controller = new AbortController();
   inFlight.set(structure.id, controller);
   setRowState(refs, 'loading', 'Downloading… 0%');
 
   try {
-    const buffer = await fetchBuffer(structure.path, {
+    const buffer = await fetchBuffer(url, {
       signal: controller.signal,
       onProgress: ({ loaded, total, fromCache }) => {
         if (fromCache) { setRowState(refs, 'loading', 'Loading from cache…'); return; }
@@ -478,7 +743,7 @@ async function loadLayer(structure) {
     if (!stlFitted || isNewGroup) { fitStl(layout === 'overlay' ? 1.7 : 1.45); stlFitted = true; }
     applyRenderModeToPane(stl);
     refreshStlEmpty();
-    setRowState(refs, 'loaded', (await isCached(structure.path)) ? 'Loaded · cached' : 'Loaded');
+    setRowState(refs, 'loaded', (await isCached(url)) ? 'Loaded · cached' : 'Loaded');
   } catch (err) {
     if (err.name === 'AbortError') setRowState(refs, 'idle', '');
     else {
@@ -516,15 +781,50 @@ function parseGLTF(buffer) {
 //  Anatomy GLB (left pane) — lazy
 // ---------------------------------------------------------------------------
 let anatomyController = null;
-async function resolveAnatomyURL() {
-  const override = new URLSearchParams(location.search).get('anatomy');
-  if (override) return override;
-  try { const res = await fetch(ANATOMY_OPTIMIZED, { method: 'HEAD', mode: 'cors' }); if (res.ok) return ANATOMY_OPTIMIZED; }
-  catch { /* fall through */ }
-  return ANATOMY_ORIGINAL;
+
+// Which reference model the left pane is showing. `?model=<id>` picks one at
+// load; `?anatomy=<url>` still overrides the file outright, for a model that
+// isn't in the registry.
+let activeModelId = (() => {
+  const q = new URLSearchParams(location.search).get('model');
+  return modelById(q) ? q : DEFAULT_MODEL_ID;
+})();
+const activeModel = () => modelById(activeModelId) || ANATOMY_MODELS[0];
+
+function resolveAnatomyURL() {
+  return new URLSearchParams(location.search).get('anatomy') || activeModel().url;
 }
+
+// Switch models: drop the current one entirely (geometry, materials, per-
+// structure state) and load the new one in its place.
+async function setAnatomyModel(id) {
+  if (!modelById(id) || id === activeModelId) return;
+  anatomyController?.abort();
+  activeModelId = id;
+
+  if (anatomyObject) {
+    anatomyObject.parent?.remove(anatomyObject);
+    disposeObject(anatomyObject);
+    anatomyObject = null;
+  }
+  anatomyParts.clear();
+  anatomyState.clear();
+  anatomyRowRefs.clear();
+  anatomyPreset = 'whole';
+  glb.root.clear();
+
+  const url = new URL(location.href);
+  if (id === DEFAULT_MODEL_ID) url.searchParams.delete('model');
+  else url.searchParams.set('model', id);
+  history.replaceState(null, '', url);
+
+  syncModelMenu();
+  buildAnatomyTree();
+  await loadAnatomy();
+}
+
 async function loadAnatomy() {
-  const url = await resolveAnatomyURL();
+  const url = resolveAnatomyURL();
   anatomyController = new AbortController();
   renderOverlay('loading', { pct: 0, label: 'Starting…' });
   try {
@@ -540,7 +840,8 @@ async function loadAnatomy() {
     const scene = await parseGLTF_anatomy(buffer);
     glb.root.clear();
     anatomyObject = scene;
-    setObjectOpacity(anatomyObject, anatomyOpacity);
+    registerAnatomyParts(scene);
+    buildAnatomyTree();
     placeAnatomy();
     glbOverlay.classList.add('hidden');
   } catch (err) {
@@ -555,10 +856,164 @@ async function loadAnatomy() {
 function parseGLTF_anatomy(buffer) {
   return new Promise((resolve, reject) => {
     gltfLoader.parse(buffer, '', (gltf) => {
-      gltf.scene.traverse((c) => { if (c.isMesh) { c.frustumCulled = false; if (c.material) { c.material.side = THREE.DoubleSide; c.material.needsUpdate = true; } } });
+      gltf.scene.traverse((c) => {
+        if (!c.isMesh) return;
+        c.frustumCulled = false;
+        if (!c.geometry.attributes.normal) c.geometry.computeVertexNormals();
+      });
       resolve(gltf.scene);
     }, reject);
   });
+}
+
+// ---------------------------------------------------------------------------
+//  Anatomy structures — per-structure meshes, colour & opacity
+// ---------------------------------------------------------------------------
+const anatomyParts = new Map();     // key -> THREE.Mesh
+const anatomyState = new Map();     // key -> { visible, color, opacity }
+const anatomyRowRefs = new Map();   // key -> { row, checkbox, swatch, colorInput, opacity }
+let anatomyPreset = 'whole';
+
+// Structure metadata for the model currently loaded.
+const anatomyMeta = (key) => activeModel().structures.find((s) => s.key === key);
+
+function anatomyStateFor(key) {
+  let st = anatomyState.get(key);
+  if (!st) {
+    const d = anatomyMeta(key) || { color: 0xffffff, opacity: 1 };
+    st = { visible: true, color: d.color, opacity: d.opacity };
+    anatomyState.set(key, st);
+  }
+  return st;
+}
+
+// Match each mesh in the GLB to its structure by glTF node name. The exporter
+// names both the node and the mesh, but a loader may hang the name on either,
+// so check the mesh and then walk up to the nearest named ancestor.
+function anatomyKeyOf(mesh) {
+  for (let o = mesh; o; o = o.parent) {
+    const k = (o.name || '').trim().toLowerCase();
+    if (anatomyMeta(k)) return k;
+  }
+  return null;
+}
+
+function registerAnatomyParts(scene) {
+  anatomyParts.clear();
+  const unmatched = [];
+  scene.traverse((o) => {
+    if (!o.isMesh || o.userData.anatomyBackOf) return;
+    const key = anatomyKeyOf(o);
+    if (key) { anatomyParts.set(key, o); o.userData.anatomyKey = key; }
+    else unmatched.push(o.name || '(unnamed)');
+  });
+
+  if (!anatomyParts.size) {
+    // A custom model supplied via ?anatomy= won't carry our node names. Leave it
+    // alone rather than colouring it wrong — it still renders, just without the
+    // per-structure panel.
+    console.warn('Anatomy model has no recognised structure names; per-structure controls disabled.', unmatched);
+    setObjectOpacity(scene, anatomyOpacity);
+    return;
+  }
+  if (unmatched.length) console.warn('Anatomy meshes with no matching structure:', unmatched);
+
+  for (const key of anatomyParts.keys()) applyAnatomyStyle(key);
+}
+
+// These structures are nested, near-convex shells that all share a centre, so
+// three.js's per-object back-to-front sort can't order them — every shell has a
+// near half and a far half at the same object distance, and the result is a
+// flat, obviously-wrong overlap. Render each translucent shell twice instead:
+// its back faces first (outermost shell first), then its front faces (innermost
+// first). That is the correct far-to-near order for concentric shells.
+//
+//   back faces:  10 + depth   (sclera 10, choroid 11, retina 12, lens 13 …)
+//   front faces: 90 - depth   (lens 87,   retina 88,  choroid 89, sclera 90)
+//
+// Opaque structures skip all of this and just depth-test normally.
+function anatomyBackMesh(mesh) {
+  let back = mesh.userData.backMesh;
+  if (!back) {
+    back = new THREE.Mesh(mesh.geometry, makeMaterial(0xffffff, 1));
+    back.material.userData.anatomy = true;
+    back.frustumCulled = false;
+    back.userData.anatomyBackOf = mesh.userData.anatomyKey;
+    mesh.userData.backMesh = back;
+    mesh.add(back);
+  }
+  return back;
+}
+
+// Effective alpha = the structure's own opacity x the pane-level anatomy opacity.
+function applyAnatomyStyle(key) {
+  const mesh = anatomyParts.get(key);
+  if (!mesh) return;
+  const st = anatomyStateFor(key);
+  const meta = anatomyMeta(key);
+  const depth = meta?.depth ?? 0;
+  const alpha = st.opacity * anatomyOpacity;
+  const translucent = alpha < 0.999;
+
+  if (!mesh.material?.userData?.anatomy) {
+    mesh.material?.dispose?.();
+    mesh.material = makeMaterial(st.color, alpha);
+    mesh.material.userData.anatomy = true;
+  }
+  const m = mesh.material;
+  m.color.setHex(st.color);
+  m.roughness = meta?.rough ?? 0.72;
+  m.opacity = alpha;
+  m.transparent = translucent;
+  m.depthWrite = !translucent;
+  m.side = translucent ? THREE.FrontSide : THREE.DoubleSide;
+  m.needsUpdate = true;
+  mesh.renderOrder = translucent ? 90 - depth : 0;
+  mesh.visible = st.visible;
+
+  const back = anatomyBackMesh(mesh);
+  const bm = back.material;
+  bm.color.setHex(st.color);
+  bm.roughness = meta?.rough ?? 0.72;
+  bm.opacity = alpha;
+  bm.transparent = true;
+  bm.depthWrite = false;
+  bm.side = THREE.BackSide;
+  bm.needsUpdate = true;
+  back.renderOrder = 10 + depth;
+  back.visible = translucent;
+}
+function applyAnatomyStyleAll() { for (const key of anatomyParts.keys()) applyAnatomyStyle(key); }
+
+function setAnatomyPreset(name) {
+  const model = activeModel();
+  const preset = model.presets?.[name];
+  if (!preset) return;
+  anatomyPreset = name;
+  for (const s of model.structures) {
+    const st = anatomyStateFor(s.key);
+    st.visible = !preset.hidden.includes(s.key);
+    st.opacity = preset.opacity[s.key] ?? s.opacity;
+  }
+  applyAnatomyStyleAll();
+  syncAnatomyRows();
+  document.querySelectorAll('#anatomy-preset .seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.preset === name));
+  const desc = $('#anatomy-preset-desc');
+  if (desc) desc.textContent = preset.desc;
+  buildCaps(glb);
+}
+
+function syncAnatomyRows() {
+  for (const [key, refs] of anatomyRowRefs) {
+    const st = anatomyStateFor(key);
+    refs.checkbox.checked = st.visible;
+    refs.opacity.value = String(Math.round(st.opacity * 100));
+    setFill(refs.opacity);
+    const hex = `#${st.color.toString(16).padStart(6, '0')}`;
+    refs.swatch.style.background = hex;
+    refs.colorInput.value = hex;
+    refs.row.classList.toggle('is-off', !st.visible);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -567,12 +1022,12 @@ function parseGLTF_anatomy(buffer) {
 async function renderOverlay(state, data = {}) {
   glbOverlay.classList.remove('hidden');
   if (state === 'idle') {
-    const cached = (await isCached(ANATOMY_OPTIMIZED)) || (await isCached(ANATOMY_ORIGINAL));
+    const cached = await isCached(resolveAnatomyURL());
     glbOverlay.innerHTML = `
       <div class="overlay-card">
         <span class="ms overlay-icon">visibility</span>
-        <div class="overlay-title">Eye anatomy model</div>
-        <div class="overlay-sub">${cached ? 'Cached — loads instantly' : 'Large file · downloads once, then cached'}</div>
+        <div class="overlay-title">${activeModel().label}</div>
+        <div class="overlay-sub">${activeModel().blurb}${cached ? ' · cached' : ''}</div>
         <button class="btn btn-primary" id="overlay-load">Load model</button>
       </div>`;
     glbOverlay.querySelector('#overlay-load').onclick = loadAnatomy;
@@ -605,6 +1060,150 @@ function setRowState(refs, state, status) {
   refs.status.textContent = status || '';
   if (state !== 'loading') refs.bar.style.width = state === 'loaded' ? '100%' : '0%';
   refs.progress.style.display = state === 'loading' ? 'block' : 'none';
+}
+
+// Each model brings its own presets, so the segmented control is rebuilt when
+// the model changes.
+function buildPresetButtons() {
+  const host = $('#anatomy-preset');
+  if (!host) return;
+  const presets = activeModel().presets || {};
+  const names = Object.keys(presets);
+  host.innerHTML = '';
+  host.classList.toggle('seg-2', names.length === 2);
+  for (const name of names) {
+    const b = document.createElement('button');
+    b.className = 'seg-btn' + (name === anatomyPreset ? ' active' : '');
+    b.dataset.preset = name;
+    b.textContent = presets[name].label;
+    b.addEventListener('click', () => setAnatomyPreset(name));
+    host.appendChild(b);
+  }
+  const desc = $('#anatomy-preset-desc');
+  if (desc) desc.textContent = presets[anatomyPreset]?.desc || '';
+}
+
+// The model menu lists every project surveyed for this pane. The ones with no
+// 3D geometry stay in the list, disabled, with the reason — otherwise it looks
+// like they were simply forgotten.
+function buildModelMenu() {
+  const menu = $('#model-menu');
+  if (!menu) return;
+  menu.innerHTML = '';
+  for (const m of ANATOMY_MODELS) {
+    const item = document.createElement('button');
+    item.className = 'model-item';
+    item.dataset.modelId = m.id;
+    item.disabled = !!m.unavailable;
+    item.innerHTML =
+      `<span class="model-name">${m.label}</span>` +
+      `<span class="model-sub">${m.unavailable || m.blurb}</span>` +
+      (m.unavailable ? '' : `<span class="model-lic mono">${m.license}</span>`);
+    if (!m.unavailable) {
+      item.addEventListener('click', () => { menu.classList.remove('open'); setAnatomyModel(m.id); });
+    }
+    menu.appendChild(item);
+  }
+  syncModelMenu();
+}
+
+function syncModelMenu() {
+  const m = activeModel();
+  const label = $('#model-label');
+  if (label) label.textContent = m.label;
+  const src = $('#anatomy-source');
+  if (src) {
+    src.innerHTML = m.href
+      ? `<a href="${m.href}" target="_blank" rel="noopener">${m.source} ↗</a> · ${m.license}`
+      : `${m.source} · ${m.license}`;
+  }
+  document.querySelectorAll('#model-menu .model-item').forEach((b) => {
+    b.classList.toggle('active', b.dataset.modelId === activeModelId);
+  });
+}
+
+// The anatomy panel mirrors the layer tree on the right: one row per structure
+// with a visibility box, a recolourable swatch and an opacity slider.
+function buildAnatomyTree() {
+  const host = $('#anatomy-tree');
+  if (!host) return;
+  host.innerHTML = '';
+  anatomyRowRefs.clear();
+
+  buildPresetButtons();
+  if (!anatomyParts.size) { const c = $('#anatomy-count'); if (c) c.textContent = '—'; return; }
+
+  let lastGroup = null;
+  for (const s of activeModel().structures) {
+    if (!anatomyParts.has(s.key)) continue;
+    if (s.group !== lastGroup) {
+      const h = document.createElement('div');
+      h.className = 'anat-group';
+      h.textContent = s.group;
+      host.appendChild(h);
+      lastGroup = s.group;
+    }
+    host.appendChild(buildAnatomyRow(s));
+  }
+  syncAnatomyRows();
+  const count = $('#anatomy-count');
+  if (count) count.textContent = anatomyParts.size;
+}
+
+function buildAnatomyRow(s) {
+  const st = anatomyStateFor(s.key);
+  const hex = `#${st.color.toString(16).padStart(6, '0')}`;
+
+  const row = document.createElement('div');
+  row.className = 'layer-row anat-row';
+  row.dataset.state = 'loaded';
+
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox'; checkbox.className = 'layer-check';
+  checkbox.id = `anat-${s.key}`; checkbox.checked = st.visible;
+
+  const swatch = document.createElement('button');
+  swatch.className = 'layer-swatch'; swatch.style.background = hex; swatch.title = 'Change colour';
+  const colorInput = document.createElement('input');
+  colorInput.type = 'color'; colorInput.value = hex; colorInput.className = 'layer-color-input';
+
+  const label = document.createElement('label');
+  label.className = 'layer-label'; label.htmlFor = checkbox.id;
+  label.innerHTML = `<span class="layer-name">${s.label}</span>` +
+    (s.coat ? '<span class="coat-tag" title="Also segmented from the µCT scan in the right-hand pane">µCT</span>' : '');
+
+  const opacity = document.createElement('input');
+  opacity.type = 'range'; opacity.min = '0'; opacity.max = '100';
+  opacity.value = String(Math.round(st.opacity * 100));
+  opacity.className = 'layer-opacity'; opacity.title = 'Opacity';
+  setFill(opacity);
+
+  const top = document.createElement('div');
+  top.className = 'layer-top';
+  top.append(checkbox, swatch, colorInput, label, opacity);
+  row.appendChild(top);
+
+  checkbox.addEventListener('change', () => {
+    st.visible = checkbox.checked;
+    row.classList.toggle('is-off', !st.visible);
+    applyAnatomyStyle(s.key);
+    buildCaps(glb);
+  });
+  swatch.addEventListener('click', () => colorInput.click());
+  colorInput.addEventListener('input', (e) => {
+    swatch.style.background = e.target.value;
+    st.color = parseInt(e.target.value.slice(1), 16);
+    applyAnatomyStyle(s.key);
+    buildCaps(glb);
+  });
+  opacity.addEventListener('input', () => {
+    setFill(opacity);
+    st.opacity = Number(opacity.value) / 100;
+    applyAnatomyStyle(s.key);
+  });
+
+  anatomyRowRefs.set(s.key, { row, checkbox, swatch, colorInput, opacity });
+  return row;
 }
 
 function buildLayerTree() {
@@ -725,6 +1324,7 @@ function buildRow(structure) {
     structure.color = parseInt(e.target.value.slice(1), 16);
     const obj = featureObjects.get(structure.id);
     if (obj) applyColor(obj, structure.color);
+    buildCaps(stl);
   });
   opacity.addEventListener('input', (e) => {
     setFill(e.target);
@@ -766,6 +1366,7 @@ function annotateSize(structure) {
 function refreshStlEmpty() {
   const anyVisible = [...featureObjects.values()].some((o) => o.visible);
   stlEmpty.classList.toggle('hidden', anyVisible);
+  buildCaps(stl);   // keep cross-section caps in sync with which coats are shown
 }
 
 // ---------------------------------------------------------------------------
@@ -905,6 +1506,24 @@ function wireControls() {
   help.querySelector('.dialog-close').addEventListener('click', () => help.close());
   help.addEventListener('click', (e) => { if (e.target === help) help.close(); });
 
+  const about = $('#about-dialog');
+  $('#btn-about').addEventListener('click', () => about.showModal());
+  about.querySelector('.dialog-close').addEventListener('click', () => about.close());
+  about.addEventListener('click', (e) => { if (e.target === about) about.close(); });
+  $('#help-to-about').addEventListener('click', () => { help.close(); about.showModal(); });
+
+  // X-ray view — drives the global opacity so users can see inside solid structures.
+  $('#xray-view').addEventListener('change', (e) => {
+    const op = $('#global-opacity');
+    op.value = e.target.checked ? 30 : 100;
+    op.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  $('#solid-fill').addEventListener('change', (e) => {
+    solidFill = e.target.checked;
+    reloadFillVariants();
+  });
+
   $('#btn-clear-cache').addEventListener('click', async () => {
     const ok = await askConfirm({ title: 'Clear cache', message: 'Remove all locally cached meshes? They will re-download next time.', confirmLabel: 'Clear' });
     if (ok) { await clearCache(); toast('Cache cleared.', 'info'); }
@@ -919,8 +1538,21 @@ function wireControls() {
   // Layout (split / overlay) + anatomy group controls
   $('#layout-seg').addEventListener('click', (e) => { const b = e.target.closest('.seg-btn'); if (b) setLayout(b.dataset.layout); });
   $('#an-vis').addEventListener('change', (e) => { if (anatomyObject) anatomyObject.visible = e.target.checked; });
+  const modelBtn = $('#model-selector'), modelMenu = $('#model-menu');
+  modelBtn?.addEventListener('click', (e) => { e.stopPropagation(); modelMenu.classList.toggle('open'); });
+  document.addEventListener('click', (e) => {
+    if (modelMenu?.classList.contains('open') && !modelMenu.contains(e.target)) modelMenu.classList.remove('open');
+  });
   const anOp = $('#an-op'); setFill(anOp);
-  anOp.addEventListener('input', () => { setFill(anOp); anatomyOpacity = Number(anOp.value) / 100; if (anatomyObject) setObjectOpacity(anatomyObject, anatomyOpacity); });
+  anOp.addEventListener('input', () => {
+    setFill(anOp);
+    anatomyOpacity = Number(anOp.value) / 100;
+    if (!anatomyObject) return;
+    // Scale every structure's own alpha rather than flattening them all to one
+    // value, so the model keeps its translucent-sclera / opaque-coats reading.
+    if (anatomyParts.size) applyAnatomyStyleAll();
+    else setObjectOpacity(anatomyObject, anatomyOpacity);
+  });
   for (const [ax, id] of [['x', '#an-ox'], ['y', '#an-oy'], ['z', '#an-oz']]) {
     const sl = $(id); setFill(sl);
     sl.addEventListener('input', () => { setFill(sl); anatomyOffset[ax] = Number(sl.value) / 100; if (layout === 'overlay') { normalizeGroupNode(anatomyGroup, anatomyOffset); updateBounds(stl); } });
@@ -1006,6 +1638,11 @@ function animate(now) {
   requestAnimationFrame(animate);
   glb.controls.update();
   stl.controls.update();
+  if (glb.headLight) {
+    glb.headLight.position.copy(glb.camera.position);
+    glb.headLight.target.position.copy(glb.controls.target);
+    glb.headLight.target.updateMatrixWorld();
+  }
   glb.renderer.render(glb.scene, glb.camera);
   stl.renderer.render(stl.scene, stl.camera);
 
@@ -1031,6 +1668,8 @@ async function init() {
   wireControls();
   wireDivider();
   setRenderMode('surface');
+  buildModelMenu();
+  buildAnatomyTree();
   renderOverlay('idle');
   refreshStlEmpty();
   requestAnimationFrame(animate);

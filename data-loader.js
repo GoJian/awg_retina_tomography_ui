@@ -61,11 +61,37 @@ export function fileKind(url = '') {
  * @param {string} [csvUrl]
  * @returns {Promise<typeof samplesData>}
  */
+/**
+ * Fetch the manifest, retrying on failure.
+ *
+ * Hugging Face's edge answers the *first*, cold request for the manifest path
+ * with `405 Method Not Allowed` instead of following its own redirect, and only
+ * serves the file on a retry — reproducibly, on a fresh browser profile, for
+ * both `fetch(url)` and `fetch(url, {mode:'cors'})`. Without this every new
+ * visitor lands on an empty layer tree; the second attempt essentially always
+ * succeeds.
+ */
+async function fetchManifest(url, tries = 4) {
+  let lastStatus = 0, lastErr = null;
+  for (let i = 0; i < tries; i++) {
+    try {
+      const res = await fetch(url, { mode: 'cors' });
+      if (res.ok) return res;
+      lastStatus = res.status;
+    } catch (err) {
+      lastErr = err;
+    }
+    await new Promise((r) => setTimeout(r, 200 * 2 ** i));
+  }
+  throw new Error(lastStatus
+    ? `Could not load dataset manifest (HTTP ${lastStatus}).`
+    : `Could not load dataset manifest. ${lastErr?.message || ''}`.trim());
+}
+
 export async function loadCSVData(csvUrl) {
   const url = csvUrl || new URLSearchParams(location.search).get('dataset') || DEFAULT_CSV_URL;
 
-  const res = await fetch(url, { mode: 'cors' });
-  if (!res.ok) throw new Error(`Could not load dataset manifest (HTTP ${res.status}).`);
+  const res = await fetchManifest(url);
   const text = await res.text();
 
   const lines = text.replace(/\r/g, '').trim().split('\n').filter((l) => l.trim());
@@ -109,8 +135,7 @@ export async function loadCSVData(csvUrl) {
       kind: fileKind(link),
       notes: iNotes >= 0 ? v[iNotes] : '',
       color: nextColor(),
-      // The whole "eye" shell reads best semi-transparent so inner features show.
-      opacity: /(^|_)eye($|\b)/i.test(fileName) ? 0.25 : 1.0,
+      opacity: 1.0,       // structures render as solid volumes by default (X-ray toggle to see inside)
       bytes: null,        // filled in asynchronously by probeSizes()
     });
   }
@@ -159,6 +184,10 @@ function addDemoSample() {
  * Optimized GLBs ship with the app under `optimized/<relative-path>.glb`
  * (same-origin → fast, no CORS), mirroring the dataset's folder layout.
  * Returns null when the source is not an STL we know how to optimize.
+ *
+ * Note: the F10 ocular coats (already .glb) intentionally load their original
+ * remote meshes here; the "Solid fill" toggle swaps in the local solid-fill
+ * variant (see solidVariant in viewer.js) only when the user turns it on.
  */
 export function deriveOptimizedURL(url = '') {
   if (!/\.stl(\?|$)/i.test(url)) return null;

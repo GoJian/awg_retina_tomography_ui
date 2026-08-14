@@ -49,9 +49,13 @@
 
     <div class="topbar-spacer"></div>
 
+    <button id="btn-sync" class="sync-toggle" aria-pressed="false" title="Link rotation of both 3D views so they turn together">
+      <span class="ms">link</span><span class="sync-toggle-label">Sync views</span>
+    </button>
+    <span class="bar-div"></span>
     <button id="btn-reset" class="icon-btn" title="Reset views"><span class="ms">restart_alt</span></button>
     <button id="btn-fit" class="icon-btn" title="Fit views"><span class="ms">fit_screen</span></button>
-    <button id="btn-sync" class="icon-btn" aria-pressed="false" title="Sync rotation of both views"><span class="ms">sync</span></button>
+    <button id="btn-about" class="icon-btn" title="About & citations"><span class="ms">info</span></button>
     <button id="btn-help" class="icon-btn" title="Help"><span class="ms">help</span></button>
     <a class="icon-btn" href="https://github.com/GoJian/awg_retina_tomography_ui" target="_blank" rel="noopener" title="GitHub"><span class="ms">code</span></a>
     <span class="bar-div"></span>
@@ -72,6 +76,25 @@
         </div>
       </section>
 
+      <section class="rail-sec" id="anatomy-sec">
+        <div class="sec-head">
+          <span>ANATOMY</span>
+          <span class="chip-count" id="anatomy-count">0</span>
+        </div>
+        <div class="model-picker">
+          <button id="model-selector" class="pill pill-wide" title="Choose the reference eye model">
+            <span class="ms">visibility</span>
+            <span id="model-label">mesh.eye</span>
+            <span class="ms">expand_more</span>
+          </button>
+          <div id="model-menu" role="menu"></div>
+        </div>
+        <div class="model-source mono" id="anatomy-source"></div>
+        <div class="seg" id="anatomy-preset"></div>
+        <div class="seg-desc mono" id="anatomy-preset-desc"></div>
+        <div id="anatomy-tree"></div>
+      </section>
+
       <section class="rail-sec rail-grow">
         <div class="sec-head"><span>LAYERS</span><span class="chip-count" id="layer-count">0</span></div>
         <div id="layer-tree"></div>
@@ -84,6 +107,7 @@
 
     <!-- ---------- Viewport (two linked panes) ---------- -->
     <main id="viewport">
+      <div id="sync-badge"><span class="ms">link</span>Rotation synced</div>
       <section id="pane-glb" class="pane" data-orient="S I R L">
         <div class="pane-label">Eye Anatomy</div>
         <div id="glb-overlay" class="pane-overlay"></div>
@@ -164,6 +188,14 @@
           <span class="mono ctl-v" id="opacity-val">100%</span>
         </div>
         <input type="range" class="slider" id="global-opacity" min="0" max="100" value="100" />
+        <label class="inline-toggle" title="See through the solid structures to the layers inside">
+          <span>X-ray view</span>
+          <span class="switch"><input type="checkbox" id="xray-view" /><span class="knob"></span></span>
+        </label>
+        <label class="inline-toggle" title="Fill each ocular coat solid inward to the next coat, closing any empty space between them, and cap the slice cross-sections (F10 coats). Off shows the original individual coats.">
+          <span>Solid fill</span>
+          <span class="switch"><input type="checkbox" id="solid-fill" /><span class="knob"></span></span>
+        </label>
         <label class="inline-toggle">
           <span>Auto-rotate</span>
           <span class="switch"><input type="checkbox" id="auto-rotate" /><span class="knob"></span></span>
@@ -206,14 +238,80 @@
     <ul>
       <li><strong>Rotate</strong> drag · <strong>Pan</strong> right-drag · <strong>Zoom</strong> scroll</li>
       <li><strong>Sync</strong> links rotation of both views</li>
+      <li><strong>Anatomy</strong> picks which reference eye model to show, then toggles, recolours and fades each of its structures; each model brings its own presets</li>
       <li><strong>Rendering</strong> switches Surface / Wireframe / Slices</li>
       <li><strong>Slices</strong> cuts the meshes with three orthogonal planes (tri-planar MPR) to reveal interior structure</li>
     </ul>
+    <p>Structures tagged <span class="cite-tag">µCT</span> — retina, choroid, sclera — are resolved in <em>both</em> panes, so the reference anatomy and the segmented scan can be read against each other.</p>
     <h3>Data</h3>
     <p>Heavy source scans are decimated and Draco-compressed, cached in your browser, and stream with a progress bar. The Hugging Face dataset is unchanged.</p>
+    <p class="dialog-foot"><button class="link-btn" id="help-to-about">About &amp; citations →</button></p>
   </div>
 </dialog>
 
-<script type="module" src="./viewer.js"></script>
+<!-- ===================== About / citations dialog ===================== -->
+<dialog id="about-dialog">
+  <div class="dialog-card">
+    <button class="dialog-close icon-btn" aria-label="Close"><span class="ms">close</span></button>
+    <h2>About</h2>
+    <p>An interactive 3D viewer for segmented ocular micro-tomography — built to explore the four posterior-pole coats of the mouse eye (retina, RPE, choroid, sclera) reconstructed from NASA space-biology imaging.</p>
+
+    <h3>Developer</h3>
+    <p class="about-line">
+      <strong>Kush Shah</strong><br />
+      NASA OSDR — AI/ML Researcher<br />
+      <a href="mailto:kushshah.edu@gmail.com">kushshah.edu@gmail.com</a>
+    </p>
+
+    <h3>Data source</h3>
+    <p class="cite">
+      NASA <strong>Open Science Data Repository (OSDR)</strong>, Space Biology Program, NASA Ames Research Center.
+      F10 mouse orbital micro-computed tomography (SkyScan 1272, 4.5&nbsp;µm isotropic), space-flight ocular / SANS research.
+      <a href="https://osdr.nasa.gov" target="_blank" rel="noopener">osdr.nasa.gov ↗</a>
+    </p>
+
+    <h3>Segmentation method</h3>
+    <p class="cite">
+      Shah, K. <em>Unsupervised 3D segmentation of the four ocular coats from mouse orbital micro-CT</em> (2026) —
+      vitreous-cavity extraction, distance-transform wall detection, and radial banding by mouse posterior-pole
+      thickness priors (retina / RPE / choroid / sclera). Meshes generated by marching cubes and hosted on
+      <a href="https://huggingface.co/datasets/kush1434/awg_retina_tomography_ui" target="_blank" rel="noopener">Hugging Face ↗</a>.
+    </p>
+
+    <h3>Reference eye models</h3>
+    <p class="cite">
+      The left pane is <strong>not</strong> NASA data — it is a published open-source eye model,
+      shown for orientation. Pick one in the <strong>ANATOMY</strong> panel:
+    </p>
+    <p class="cite">
+      <strong>mesh.eye</strong> and the <strong>Feel++ CAD eye</strong> — Chabannes, V., Prud'homme, C.,
+      Saigre, T., Sala, L., Szopos, M., &amp; Trophime, C. <em>A 3D geometrical model and meshing
+      procedures for the human eyeball</em> (Cemosis, IRMA UMR 7501, Université de Strasbourg, CNRS) —
+      <a href="https://github.com/feelpp/mesh.eye" target="_blank" rel="noopener">feelpp/mesh.eye ↗</a>,
+      <a href="https://doi.org/10.5281/zenodo.13829740" target="_blank" rel="noopener">doi:10.5281/zenodo.13829740</a>;
+      described in Sala, L. et&nbsp;al., <em>Int J Numer Meth Biomed Engng</em> 2024; 40(2):e3791. GPL-3.0.
+    </p>
+    <p class="cite">
+      <strong>Upatras oculomotor</strong> — Stanev, D. et&nbsp;al. <em>An open-source OpenSim oculomotor
+      model for kinematics and dynamics simulation</em>, University of Patras
+      (<a href="https://arxiv.org/abs/1807.07332" target="_blank" rel="noopener">arXiv:1807.07332</a>,
+      <a href="https://simtk.org/projects/eye" target="_blank" rel="noopener">simtk.org/projects/eye ↗</a>).
+      Globe plus the six extraocular muscles, swept from the model's own path points. CC BY 4.0.
+    </p>
+    <p class="cite">
+      Every model is a <strong>human</strong> eye while the segmented scan is <strong>mouse</strong>;
+      they are references for orientation, not for morphometric comparison. Structures tagged
+      <span class="cite-tag">µCT</span> are the ones resolved in both panes. Model licences are separate
+      from this viewer's MIT code — see <code>optimized/anatomy/README.md</code>, which also lists the
+      projects surveyed that ship no 3D geometry (ISETBio, OpenRetina, V-Cornea, OpenEyeSim,
+      pulse2percept, Open Source Brain).
+    </p>
+
+    <h3>Acknowledgements</h3>
+    <p class="cite">Rendering with <a href="https://threejs.org" target="_blank" rel="noopener">Three.js</a> (STL / glTF loaders, OrbitControls). Solid models tessellated with <a href="https://gmsh.info" target="_blank" rel="noopener">gmsh</a>, decimated &amp; Draco-compressed with <a href="https://gltf-transform.dev" target="_blank" rel="noopener">glTF-Transform</a>.</p>
+  </div>
+</dialog>
+
+<script type="module" src="./viewer.js?v=7"></script>
 </body>
 </html>

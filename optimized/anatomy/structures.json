@@ -1,0 +1,156 @@
+{
+  "upat": [
+    {
+      "key": "globe",
+      "label": "Globe (sclera)",
+      "faces": 800,
+      "watertight": false,
+      "volume_mm3": 5467.531,
+      "bounds": [
+        [
+          -11.018,
+          -12.0,
+          -12.0
+        ],
+        [
+          11.018,
+          12.0,
+          12.0
+        ]
+      ]
+    },
+    {
+      "key": "pupil",
+      "label": "Pupil / cornea",
+      "faces": 160,
+      "watertight": false,
+      "volume_mm3": 1745.862,
+      "bounds": [
+        [
+          -12.952,
+          -6.793,
+          -6.736
+        ],
+        [
+          -10.915,
+          6.793,
+          6.851
+        ]
+      ]
+    },
+    {
+      "key": "lateral_rectus",
+      "label": "Lateral rectus",
+      "faces": 1560,
+      "watertight": false,
+      "volume_mm3": 49.905,
+      "bounds": [
+        [
+          -8.167,
+          -1.663,
+          -13.273
+        ],
+        [
+          33.316,
+          2.3,
+          13.29
+        ]
+      ]
+    },
+    {
+      "key": "medial_rectus",
+      "label": "Medial rectus",
+      "faces": 1560,
+      "watertight": false,
+      "volume_mm3": 4.655,
+      "bounds": [
+        [
+          -9.963,
+          -1.7,
+          9.211
+        ],
+        [
+          29.058,
+          2.263,
+          17.42
+        ]
+      ]
+    },
+    {
+      "key": "superior_rectus",
+      "label": "Superior rectus",
+      "faces": 1560,
+      "watertight": false,
+      "volume_mm3": 29.134,
+      "bounds": [
+        [
+          -8.886,
+          3.081,
+          -1.648
+        ],
+        [
+          31.502,
+          13.24,
+          17.468
+        ]
+      ]
+    },
+    {
+      "key": "inferior_rectus",
+      "label": "Inferior rectus",
+      "faces": 1560,
+      "watertight": false,
+      "volume_mm3": 22.945,
+      "bounds": [
+        [
+          -9.533,
+          -13.295,
+          -1.592
+        ],
+        [
+          31.449,
+          -1.931,
+          17.5
+        ]
+      ]
+    },
+    {
+      "key": "superior_oblique",
+      "label": "Superior oblique",
+      "faces": 1560,
+      "watertight": false,
+      "volume_mm3": 70.962,
+      "bounds": [
+        [
+          -10.102,
+          -0.243,
+          -4.025
+        ],
+        [
+          30.263,
+          13.54,
+          17.398
+        ]
+      ]
+    },
+    {
+      "key": "inferior_oblique",
+      "label": "Inferior oblique",
+      "faces": 1560,
+      "watertight": false,
+      "volume_mm3": 66.535,
+      "bounds": [
+        [
+          -13.108,
+          -15.991,
+          -10.696
+        ],
+        [
+          9.451,
+          0.628,
+          12.529
+        ]
+      ]
+    }
+  ]
+}

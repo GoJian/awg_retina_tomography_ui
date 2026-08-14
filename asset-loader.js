@@ -3,7 +3,7 @@
 //  persistent on-disk cache (Cache Storage API) so heavy meshes download once.
 // ============================================================================
 
-const CACHE_NAME = 'retina-assets-v1';
+const CACHE_NAME = 'retina-assets-v2';
 
 // Cache Storage is only available in secure contexts (https / localhost).
 const cacheSupported =

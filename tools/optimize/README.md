@@ -24,15 +24,26 @@ npm install                          # @gltf-transform/core for the STL converte
 
 Normals are intentionally dropped and recomputed in the browser after decimation.
 
-## Anatomy GLB
+## Reference eye models
 
-The anatomy model is texture-dominated, so geometry simplification is disabled and
-textures are recompressed to WebP:
+The left pane's eye models are generated from their upstream sources rather than
+shipped as artist models, so every anatomical structure is a separate named,
+watertight mesh the viewer can toggle, recolour and slice independently:
 
 ```bash
-gltf-transform optimize original/eye-anatomy.glb ../../optimized/eye-anatomy.glb \
-  --simplify false --compress draco --texture-compress webp --texture-size 4096
+./anatomy/build-anatomy.sh
 ```
+
+That clones [feelpp/mesh.eye](https://github.com/feelpp/mesh.eye) and the
+[Upatras OpenSim oculomotor model](https://gitlab.com/mitkof6/upat_eye_model),
+tessellates the two STEP solid models with gmsh's OpenCASCADE kernel, sweeps the
+six extraocular muscles from their OpenSim path points, and packs each model into
+a Draco glTF with one named node per structure. Pass model ids to rebuild just
+some (`./anatomy/build-anatomy.sh work upat`).
+
+See [`../../optimized/anatomy/README.md`](../../optimized/anatomy/README.md) for
+provenance, per-model structure tables, and the upstream licences that cover the
+output.
 
 ## Results
 
@@ -40,7 +51,14 @@ gltf-transform optimize original/eye-anatomy.glb ../../optimized/eye-anatomy.glb
 |-------------------|---------:|----------:|----------:|
 | `eye.stl`         | 1008 MB  | 0.6 MB    | ~1600×    |
 | `feature.stl`     | 149 MB   | 0.3 MB    | ~450×     |
-| `eye-anatomy.glb` | 137 MB   | 7.2 MB    | ~19×      |
+| `eye-anatomy.glb`     | 3.5 MB¹ | 0.35 MB | ~10×  |
+| `human-eye-cad.glb`   | 3.6 MB¹ | 0.36 MB | ~10×  |
+| `upat-oculomotor.glb` | 0.17 MB¹| 0.03 MB | ~5.5× |
+
+¹ Raw glTF from the tessellated source. Together the three models are 740 KB.
+They replaced a single 137 MB texture-dominated artist model that optimized to
+7.2 MB / 2.68 M triangles — one of them alone is **20× smaller and 18× lighter**
+(147 k triangles), and all of them are per-structure.
 
 > `original/` and `out/` are git-ignored — download the source meshes from the
 > [Hugging Face dataset](https://huggingface.co/datasets/kush1434/awg_retina_tomography_ui)
