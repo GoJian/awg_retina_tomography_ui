@@ -1,6 +1,9 @@
 // ============================================================================
 //  data-loader.js — loads & parses the dataset manifest (CSV) from Hugging Face
-//  and exposes a clean, typed data model for the viewer to consume.
+//  and exposes a clean, typed data model for the viewer to consume. The same
+//  parser also builds sample records from files the user picks or drops
+//  (samplesFromFiles), so a manifest URL, a manifest file and a bare set of
+//  meshes all arrive in the viewer in one shape.
 // ============================================================================
 
 // Location of the dataset manifest. Can be overridden via ?dataset=<url>.
@@ -56,6 +59,27 @@ export function fileKind(url = '') {
   return 'stl';
 }
 
+/** The file extensions the viewer renders, lower-case, with the dot. */
+export const MESH_EXTENSIONS = ['.glb', '.gltf', '.stl'];
+
+/** Whether a file name or URL carries an extension the viewer renders. */
+export function isMeshFile(name = '') {
+  const clean = String(name).split('?')[0].toLowerCase();
+  return MESH_EXTENSIONS.some((ext) => clean.endsWith(ext));
+}
+
+/** The last path segment of a file name, path or URL, without any query. */
+export function baseName(name = '') {
+  return String(name).split('?')[0].split(/[\\/]/).pop();
+}
+
+/** A display label from a file name: `retina_inner-v2.glb` → `Retina inner v2`. */
+export function labelFromFileName(name = '') {
+  const base = baseName(name).replace(/\.[^.]+$/, '');
+  const words = base.replace(/[_\-.]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return words ? words[0].toUpperCase() + words.slice(1) : base;
+}
+
 /**
  * Load and parse the dataset manifest.
  * @param {string} [csvUrl]
@@ -94,7 +118,23 @@ export async function loadCSVData(csvUrl) {
   const res = await fetchManifest(url);
   const text = await res.text();
 
-  const lines = text.replace(/\r/g, '').trim().split('\n').filter((l) => l.trim());
+  samplesData.samples = parseManifest(text);
+  if (new URLSearchParams(location.search).get('demo') !== 'off') addDemoSample();
+  return samplesData;
+}
+
+/**
+ * Parse the text of a CSV manifest into sample records. Pure: no fetch, no
+ * `location`, nothing written to `samplesData` — loadCSVData and the file
+ * import both build on it. Header names are matched case-insensitively and
+ * column order does not matter; a row missing `sample_name`, `file_name` or
+ * `seg_mesh_link` is skipped.
+ * @param {string} text
+ * @returns {object[]} samples, in first-seen order
+ * @throws {Error} when the manifest has no data rows
+ */
+export function parseManifest(text) {
+  const lines = String(text).replace(/\r/g, '').trim().split('\n').filter((l) => l.trim());
   if (lines.length < 2) throw new Error('Dataset manifest is empty.');
 
   const headers = parseCSVLine(lines[0]).map((h) => h.toLowerCase());
@@ -140,9 +180,88 @@ export async function loadCSVData(csvUrl) {
     });
   }
 
-  samplesData.samples = [...byName.values()];
-  if (new URLSearchParams(location.search).get('demo') !== 'off') addDemoSample();
-  return samplesData;
+  return [...byName.values()];
+}
+
+/**
+ * Build sample records from files the user picked or dropped — the seamless
+ * import path, which needs no manifest to be written first. Two shapes are
+ * accepted:
+ *
+ *   - **meshes only** (`.glb`, `.gltf`, binary `.stl`): one sample, labelled
+ *     `Imported` (then `Imported 2`, …), holding one structure per file, each
+ *     labelled from its file name;
+ *   - **a CSV manifest plus its meshes**: the manifest's own samples and rows,
+ *     each `seg_mesh_link` matched to a supplied file by base name. A link that
+ *     matches nothing but is an `http(s)` URL is kept and fetched as usual; any
+ *     other unmatched link is skipped and reported. Files the manifest does not
+ *     name are ignored.
+ *
+ * Every structure that resolved to a file gets `path: 'local:<file name>'`,
+ * `bytes` from the file, `local: true`, and is pre-resolved so no size probe
+ * runs. Serve those paths through `createLocalIo()` (app/local-files.js) and
+ * hand the samples to the layer controller as usual. Nothing is uploaded.
+ *
+ * @param {Iterable<{name: string, size?: number, text?: () => Promise<string>}>} fileList
+ *   File objects, or anything with a name, a size and (for a manifest) text().
+ * @param {{ existing?: Array<{id: string, imported?: boolean}> }} [opts]
+ *   `existing` is the samples already shown, so ids and labels stay unique.
+ * @returns {Promise<{ samples: object[], files: Map<string, object>, skipped: string[] }>}
+ *   `files` maps each `local:` path to its file; `skipped` lists what could not be used.
+ * @throws {Error} when no mesh file and no manifest were supplied
+ */
+export async function samplesFromFiles(fileList, { existing = [] } = {}) {
+  const files = [...(fileList || [])];
+  const meshes = files.filter((f) => isMeshFile(f.name));
+  const manifests = files.filter((f) => /\.csv$/i.test(baseName(f.name)));
+  const skipped = files.filter((f) => !isMeshFile(f.name) && !/\.csv$/i.test(baseName(f.name))).map((f) => baseName(f.name));
+  if (!meshes.length && !manifests.length) {
+    throw new Error('No mesh files (.glb, .gltf, .stl) or CSV manifest were provided.');
+  }
+
+  const byBase = new Map(meshes.map((f) => [baseName(f.name).toLowerCase(), f]));
+  const localFiles = new Map();
+  const taken = new Set(existing.map((s) => s.id));
+  const uniqueId = (base) => { let id = base, n = 2; while (taken.has(id)) id = `${base}_${n++}`; taken.add(id); return id; };
+  const attach = (st, file) => {
+    const path = `local:${baseName(file.name)}`;
+    localFiles.set(path, file);
+    return Object.assign(st, { path, kind: fileKind(file.name), bytes: file.size || null, local: true, _resolved: true });
+  };
+
+  let samples;
+  if (manifests.length) {
+    samples = parseManifest(await manifests[0].text());
+    for (const sample of samples) {
+      const oldId = sample.id;
+      sample.id = uniqueId(oldId);
+      sample.imported = true;
+      sample.structures = sample.structures.filter((st) => {
+        st.sampleId = sample.id;
+        st.id = `${sample.id}__${st.id.slice(oldId.length + 2)}`;
+        const file = byBase.get(baseName(st.path).toLowerCase());
+        if (file) { attach(st, file); return true; }
+        if (/^https?:\/\//i.test(st.path)) return true;   // a remote mesh the manifest points at
+        skipped.push(st.path);
+        return false;
+      });
+    }
+    samples = samples.filter((s) => s.structures.length);
+    if (!samples.length) throw new Error('The manifest names no mesh that was provided or reachable.');
+  } else {
+    const n = existing.filter((s) => s.imported).length;
+    const label = n ? `Imported ${n + 1}` : 'Imported';
+    const id = uniqueId(label.toLowerCase().replace(/\s+/g, '_'));
+    const sample = { id, label, link: '', offset: { x: 0, y: 0, z: 0 }, opacity: 1, imported: true, structures: [] };
+    for (const file of meshes) {
+      sample.structures.push(attach({
+        id: `${id}__${baseName(file.name)}`, sampleId: id, label: labelFromFileName(file.name),
+        path: '', kind: 'stl', notes: '', color: nextColor(), opacity: 1.0, bytes: null,
+      }, file));
+    }
+    samples = [sample];
+  }
+  return { samples, files: localFiles, skipped };
 }
 
 // A palette used to re-colour demo samples so they stand out when overlaid.

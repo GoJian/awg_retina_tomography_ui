@@ -1,7 +1,7 @@
 {
   "name": "awg-retina-tomography-ui",
   "version": "1.0.0",
-  "description": "Interactive 3D web viewer for GeneLab AWG retina micro-tomography",
+  "description": "OcuLayer — a zero-install browser viewer for segmented ocular micro-tomography (GeneLab AWG retina micro-CT)",
   "type": "module",
   "private": true,
   "license": "MIT",
@@ -19,12 +19,14 @@
     "./core/*": "./core/*.js",
     "./headless": "./core/adapters-headless.js",
     "./browser": "./app/browser-adapters.js",
+    "./local-files": "./app/local-files.js",
     "./data-loader": "./data-loader.js",
     "./asset-loader": "./asset-loader.js"
   },
   "files": [
     "core",
     "app/browser-adapters.js",
+    "app/local-files.js",
     "data-loader.js",
     "asset-loader.js",
     "README.md",

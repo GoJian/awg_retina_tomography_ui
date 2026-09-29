@@ -133,9 +133,8 @@ export function createAnatomyPanel(wb, io) {
     if (desc) desc.textContent = presets[wb.anatomy.preset]?.desc || '';
   }
 
-  // The model menu lists every project surveyed for this pane. The ones with no
-  // 3D geometry stay in the list, disabled, with the reason — otherwise it looks
-  // like they were simply forgotten.
+  // The model menu lists the registered reference eyes: every entry is a model
+  // the pane can load, with its blurb and licence.
   function buildModelMenu() {
     const menu = $('#model-menu');
     if (!menu) return;
@@ -144,14 +143,11 @@ export function createAnatomyPanel(wb, io) {
       const item = document.createElement('button');
       item.className = 'model-item';
       item.dataset.modelId = m.id;
-      item.disabled = !!m.unavailable;
       item.innerHTML =
         `<span class="model-name">${m.label}</span>` +
-        `<span class="model-sub">${m.unavailable || m.blurb}</span>` +
-        (m.unavailable ? '' : `<span class="model-lic mono">${m.license}</span>`);
-      if (!m.unavailable) {
-        item.addEventListener('click', () => { menu.classList.remove('open'); wb.anatomy.setModel(m.id); });
-      }
+        `<span class="model-sub">${m.blurb}</span>` +
+        `<span class="model-lic mono">${m.license}</span>`;
+      item.addEventListener('click', () => { menu.classList.remove('open'); wb.anatomy.setModel(m.id); });
       menu.appendChild(item);
     }
     syncModelMenu();

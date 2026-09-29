@@ -249,6 +249,47 @@ test.describe('URL parameters', () => {
   });
 });
 
+test.describe('importing your own data', () => {
+  test('files picked from disk appear as a new local sample, load at once and render', async ({ page }) => {
+    await page.goto(APP);
+    await expect(page.locator('#layer-count')).toHaveText('5');
+
+    await page.locator('#btn-import').click();
+    await expect(page.locator('#import-dialog')).toBeVisible();
+    // The bundled F10 coats stand in for a user's own files; the input is the
+    // same one the drop zone and the Choose-files button feed.
+    await page.locator('#import-files').setInputFiles(['local/F10/retina.glb', 'local/F10/sclera.glb']);
+
+    await expect(page.locator('#import-dialog')).toBeHidden();
+    await expect(page.locator('#layer-count')).toHaveText('7');
+    const group = page.locator('.sample.is-imported');
+    await expect(group).toContainText('Imported');
+    await expect(group).toContainText('Retina');
+    await expect(group).toContainText('Sclera');
+    // Local layers switch on without a click and read from memory, never the network.
+    await expect(group.locator('.layer-row').nth(0)).toHaveAttribute('data-state', 'loaded', { timeout: 45_000 });
+    await expect(group.locator('.layer-row').nth(1)).toHaveAttribute('data-state', 'loaded', { timeout: 45_000 });
+    await expect(group.locator('.layer-row').first()).toContainText(/local file/i);
+    await expect(page.locator('#stl-empty')).toBeHidden();
+    await expect.poll(() => triangleCount(page), { timeout: 20_000 }).toBeGreaterThan(1000);
+    await expect(page.locator('#study-label')).toContainText(/IMPORTED/);
+  });
+
+  test('a manifest URL typed into the dialog replaces the dataset and lands in the address bar', async ({ page }) => {
+    await page.goto('/index.html?dataset=local/does-not-exist.csv&demo=off');
+    await expect(page.locator('#layer-count')).toHaveText('0', { timeout: 30_000 });
+
+    await page.locator('#btn-import').click();
+    await page.locator('#import-url').fill('local/F10/F10_layers.csv');
+    await page.locator('#import-load-url').click();
+
+    await expect(page.locator('#import-dialog')).toBeHidden();
+    await expect(page.locator('#layer-count')).toHaveText('5');
+    await expect(page.locator('#layer-tree')).toContainText('F10 mouse eye');
+    expect(new URL(page.url()).searchParams.get('dataset')).toBe('local/F10/F10_layers.csv');
+  });
+});
+
 test.describe('responsive', () => {
   test('both panes survive a phone-sized viewport', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });

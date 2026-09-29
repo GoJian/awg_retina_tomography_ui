@@ -11,13 +11,12 @@ import {
   modelById, resolveModelId, structureMeta, presetOf,
 } from '../../core/anatomy-models.js';
 
-const available = ANATOMY_MODELS.filter((m) => !m.unavailable);
-const unavailable = ANATOMY_MODELS.filter((m) => m.unavailable);
+const available = ANATOMY_MODELS;
 
 describe('registry shape', () => {
-  test('ships three renderable models and six surveyed-but-unavailable ones', () => {
+  test('ships exactly three renderable models and nothing it cannot load', () => {
     assert.deepEqual(available.map((m) => m.id), ['mesheye', 'humaneye', 'upat']);
-    assert.deepEqual(unavailable.map((m) => m.id), ['isetbio', 'openretina', 'vcornea', 'openeyesim', 'p2p', 'osb']);
+    for (const m of available) assert.equal('unavailable' in m, false, `${m.id} carries no unavailable flag`);
   });
 
   test('the default model is the first available one', () => {
@@ -35,15 +34,6 @@ describe('registry shape', () => {
       assert.deepEqual(m.presets.whole.opacity, {});
     }
   });
-
-  test('every unavailable model states its reason and ships no geometry', () => {
-    for (const m of unavailable) {
-      assert.equal(typeof m.unavailable, 'string', m.id);
-      assert.ok(m.unavailable.length > 0, m.id);
-      assert.equal(m.url, undefined, m.id);
-      assert.equal(m.structures, undefined, m.id);
-    }
-  });
 });
 
 describe('modelById', () => {
@@ -52,7 +42,11 @@ describe('modelById', () => {
     assert.equal(modelById('humaneye').url, 'optimized/anatomy/human-eye-cad.glb');
   });
 
-  test('is undefined for the six unavailable ids and for unknown/missing ids', () => {
+  test('is undefined for the formerly listed survey-only ids and for unknown/missing ids', () => {
+    // The six surveyed projects that ship no geometry (ISETBio, OpenRetina,
+    // V-Cornea, OpenEyeSim, pulse2percept, Open Source Brain) used to sit in
+    // the registry as disabled stubs; a stale ?model= naming one must still
+    // resolve to nothing rather than to a half-record.
     for (const id of ['isetbio', 'openretina', 'vcornea', 'openeyesim', 'p2p', 'osb']) {
       assert.equal(modelById(id), undefined, id);
     }
@@ -69,8 +63,8 @@ describe('resolveModelId (the ?model= rule)', () => {
     assert.equal(resolveModelId('mesheye'), 'mesheye');
   });
 
-  test('falls back to the default for an unavailable, unknown or missing id', () => {
-    assert.equal(resolveModelId('isetbio'), 'mesheye');   // listed, but no geometry
+  test('falls back to the default for an unknown or missing id', () => {
+    assert.equal(resolveModelId('isetbio'), 'mesheye');   // a formerly listed survey-only id
     assert.equal(resolveModelId('bogus'), 'mesheye');
     assert.equal(resolveModelId(''), 'mesheye');
     assert.equal(resolveModelId(null), 'mesheye');        // URLSearchParams.get() of a missing param

@@ -117,9 +117,9 @@ describe('construction', () => {
     assert.equal(stl.root.children.length, 0);
   });
 
-  test('modelId option goes through resolveModelId: available ids honoured, unknown / unavailable fall back', () => {
+  test('modelId option goes through resolveModelId: registered ids honoured, unknown ones fall back', () => {
     assert.equal(makeCtx({ options: { modelId: 'upat' } }).anatomy.modelId(), 'upat');
-    assert.equal(makeCtx({ options: { modelId: 'isetbio' } }).anatomy.modelId(), 'mesheye');
+    assert.equal(makeCtx({ options: { modelId: 'isetbio' } }).anatomy.modelId(), 'mesheye');   // a stale survey-only id
     assert.equal(makeCtx({ options: { modelId: 'nope' } }).anatomy.modelId(), 'mesheye');
     assert.equal(makeCtx({ options: { modelId: null } }).anatomy.modelId(), 'mesheye');
     assert.equal(makeCtx({ options: {} }).anatomy.modelId(), 'mesheye');
@@ -390,7 +390,7 @@ describe('setModel()', () => {
     assert.equal(ctx.glb.root.children.length, 1);
   });
 
-  test('an unavailable id or the current id emits nothing and fetches nothing', async () => {
+  test('an unknown id or the current id emits nothing and fetches nothing', async () => {
     const ctx = makeCtx();
     await ctx.anatomy.setModel('isetbio');
     await ctx.anatomy.setModel('nope');

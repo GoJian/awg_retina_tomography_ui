@@ -6,7 +6,36 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **Import your own data.** An **Import** button in the top bar and a
+  drop target over both views take `.glb` / `.gltf` / `.stl` meshes, or a CSV
+  manifest together with the meshes it names, and add them as a new sample
+  beside the bundled dataset — read in memory, never uploaded, every layer
+  switched on at once. The same dialog loads a hosted manifest by URL and
+  writes it into the address bar as `?dataset=`, so the view can be shared.
+  `data-loader.js` gains `parseManifest(text)`, `samplesFromFiles(files)`,
+  `isMeshFile`, `baseName` and `labelFromFileName`; `app/local-files.js`
+  (`createLocalIo`, also the package's `./local-files` subpath) serves the
+  imported files through the workbench's `io`; `app/ui/import-panel.js` is the
+  dialog and the drop targets; `LayerController.clear()` empties the pane
+  when a dataset is replaced, and the layer panel's `activate(id)` is the
+  programmatic tick.
+- 33 unit tests and 2 browser tests for the import path (540 and 20 in all).
+
+### Changed
+
+- The software is now called **OcuLayer**; "Retina Tomography Viewer" stays
+  as its descriptive subtitle. The repository, package and install paths are
+  unchanged.
+- The reference-eye menu lists only the three models it can load. The six
+  open eye-modelling projects that were surveyed and ship no 3D geometry were
+  shown as disabled entries; they are now recorded, with the reason each was
+  rejected, in `optimized/anatomy/README.md` only. `ANATOMY_MODELS` no longer
+  carries `unavailable` stubs and `modelById` / `resolveModelId` need no
+  availability check.
+- The JOSS paper is restructured to the journal's section set and word limit,
+  and the second author's affiliation is corrected.
 
 ## [1.0.0] — 2026-09-15
 

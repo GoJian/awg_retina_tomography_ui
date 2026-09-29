@@ -6,7 +6,8 @@
 //  checkbox's load path (Checking… while resolving, the heavy-download
 //  confirm, load / re-show / abort+hide) and the layer events rendered back
 //  onto the rows (state + labels, progress bar, error toast, the empty-pane
-//  placeholder, offset sliders following the core).
+//  placeholder, offset sliders following the core), activate() as the
+//  programmatic tick, and the labels an imported (local) layer gets.
 // ============================================================================
 
 import { test, describe, mock, beforeEach, afterEach } from 'node:test';
@@ -459,5 +460,47 @@ describe('layer events', () => {
     assert.equal(ox.style['--fill'], '37.5%');
     assert.equal(oy.value, '7');
     assert.doesNotThrow(() => wb.layers.emitter.emit('sample:offset', { sampleId: 'nope', axis: 'x', value: 1 }));
+  });
+});
+
+// ---------------------------------------------------------------------------
+//  activate() and imported samples
+// ---------------------------------------------------------------------------
+describe('activate / imported', () => {
+  test('activate(id) ticks the box and runs the same load path as a click; a second call is a no-op', async () => {
+    const { wb, panel, samples, checkOf, rowOf } = makePanel();
+    panel.build(samples);
+    const load = mock.method(wb.layers, 'load');
+    const p = panel.activate('a');
+    assert.equal(checkOf('a').checked, true);
+    await p;
+    assert.equal(load.mock.callCount(), 1);
+    assert.equal(load.mock.calls[0].arguments[0].id, 'a');
+    assert.equal(panel.activate('a'), undefined, 'already checked → nothing');
+    assert.equal(load.mock.callCount(), 1);
+    assert.equal(panel.activate('nope'), undefined, 'unknown id → nothing');
+    await waitFor(() => rowOf('a').dataset.state === 'loaded');
+  });
+
+  test('an imported sample is marked in the tree and its local layer reads "Reading file…" then "Loaded · local file"', async () => {
+    const io = stubIo({ 'local:a.stl': binarySTL(2), cached: ['local:a.stl'] });
+    const wb = createWorkbench({ adapters: headlessAdapters(), io });
+    const a = structure('a', 'imp', { path: 'local:a.stl', local: true, bytes: 184 });
+    const samples = [sample('imp', [a], { label: 'Imported', imported: true })];
+    wb.layers.setSamples(samples);
+    const panel = createLayerPanel(wb, io);
+    panel.wireEvents();
+    panel.build(samples);
+    const tree = dom.doc.el('#layer-tree');
+    const group = tree.children[0];
+    assert.equal(group.className, 'sample is-imported');
+    assert.match(group.querySelector('.sample-ctl').innerHTML, /imported · read from your files/);
+
+    const labels = [];
+    wb.on('layer:state', () => labels.push(group.querySelector('.layer-status').textContent));
+    await panel.activate('a');
+    await waitFor(() => group.querySelector('.layer-row').dataset.state === 'loaded');
+    assert.equal(labels[0], 'Reading file…');
+    assert.equal(labels[labels.length - 1], 'Loaded · local file');
   });
 });

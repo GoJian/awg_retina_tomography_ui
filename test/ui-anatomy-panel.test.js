@@ -1,7 +1,7 @@
 // ============================================================================
 //  Tests for app/ui/anatomy-panel.js — the reference-eye panel rendered into
-//  a fake DOM over a real headless workbench: the model menu (available vs
-//  surveyed-only entries, the active mark, the source line), the preset
+//  a fake DOM over a real headless workbench: the model menu (one entry per
+//  registered model, the active mark, the source line), the preset
 //  segmented control, the structure tree built from the loaded parts (group
 //  headers, rows, the µCT coat tag, the count) and its input turned into
 //  wb.anatomy.* calls, the overlay card's idle / loading / error states with
@@ -51,24 +51,21 @@ const loaded = (wb) => waitFor(() => wb.anatomy.parts.size > 0 && !wb.anatomy.lo
 //  Model menu
 // ---------------------------------------------------------------------------
 describe('buildModelMenu', () => {
-  test('lists every surveyed model: the available ones clickable with a licence, the rest disabled with the reason', () => {
+  test('lists every registered model, each enabled, clickable and carrying its blurb and licence', () => {
     const { panel, doc } = makePanel();
     panel.buildModelMenu();
     const items = doc.el('#model-menu').children;
     assert.equal(items.length, ANATOMY_MODELS.length);
+    assert.equal(items.length, 3, 'nothing the pane cannot load is offered');
     for (const [i, m] of ANATOMY_MODELS.entries()) {
       const item = items[i];
       assert.equal(item.classList.contains('model-item'), true);
       assert.equal(item.dataset.modelId, m.id);
-      assert.equal(item.disabled, !!m.unavailable);
+      assert.equal(item.disabled, false);
       assert.match(item.innerHTML, new RegExp(`<span class="model-name">${m.label.replace(/[+]/g, '\\+')}</span>`));
-      if (m.unavailable) {
-        assert.match(item.innerHTML, new RegExp(m.unavailable.slice(0, 20).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-        assert.doesNotMatch(item.innerHTML, /model-lic/);
-        assert.equal(item.listeners.has('click'), false, 'no handler on an unavailable model');
-      } else {
-        assert.match(item.innerHTML, new RegExp(`<span class="model-lic mono">${m.license.replace(/[.]/g, '\\.')}</span>`));
-      }
+      assert.match(item.innerHTML, new RegExp(`<span class="model-sub">${m.blurb.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</span>`));
+      assert.match(item.innerHTML, new RegExp(`<span class="model-lic mono">${m.license.replace(/[.]/g, '\\.')}</span>`));
+      assert.equal(item.listeners.has('click'), true, 'every entry has a handler');
     }
     assert.deepEqual(items.filter((i) => i.classList.contains('active')).map((i) => i.dataset.modelId), ['mesheye']);
   });

@@ -1,8 +1,8 @@
 // ============================================================================
 //  anatomy-models.js — the registry of reference eye models the left pane can
-//  show: per-structure styling, the model list (available and surveyed-but-
-//  unavailable alike) and the pure lookups the app and the anatomy controller
-//  use to resolve a model, a structure or a preset. Plain data, no DOM.
+//  show: per-structure styling, the model list and the pure lookups the app
+//  and the anatomy controller use to resolve a model, a structure or a preset.
+//  Plain data, no DOM.
 // ============================================================================
 
 // The left pane can show any of several published open-source eye models. Each
@@ -15,10 +15,10 @@
 // (0 = outermost); translucent shells are drawn back-faces outermost-in, then
 // front-faces innermost-out, which is what makes them blend in the right order.
 //
-// Models flagged `unavailable` are the remaining projects surveyed for this
-// pane. They are listed rather than hidden so it is clear they were considered
-// and why they cannot be rendered — they are simulation code or data-driven
-// models that ship no 3D anatomical geometry at all.
+// Only models that ship renderable geometry are registered. The open
+// eye-modelling projects that were surveyed and found to ship none are
+// recorded, with the reason for each, in optimized/anatomy/README.md rather
+// than in this list, so the model menu offers nothing it cannot load.
 
 /**
  * @typedef {{label: string, group: string, color: number, opacity: number,
@@ -87,11 +87,8 @@ const struct = (keys) => keys.map((k) => (Array.isArray(k)
  * @typedef {{id: string, label: string, blurb: string, url: string,
  *   source: string, href: string, license: string, focus: string,
  *   structures: Array<StructureStyle & {key: string}>,
- *   presets: Object<string, AnatomyPreset>}
- *   | {id: string, label: string, unavailable: string}} AnatomyModel
- *   Two shapes: the full record of a model that can be loaded, and the stub of
- *   a surveyed project, whose `unavailable` string is the reason it ships no
- *   renderable geometry.
+ *   presets: Object<string, AnatomyPreset>}} AnatomyModel
+ *   The full record of a model the left pane can load.
  */
 
 /** @type {AnatomyModel[]} */
@@ -146,14 +143,6 @@ const ANATOMY_MODELS = [
         opacity: { globe: 0.3, pupil: 0.6 } },
     },
   },
-  // Surveyed, but none ships 3D eye geometry. Reasons are the checked facts,
-  // not guesses — see optimized/anatomy/README.md for how each was verified.
-  { id: 'isetbio',    label: 'ISETBio',          unavailable: 'MATLAB optics + cone mosaic. Zero mesh files in the repo' },
-  { id: 'openretina', label: 'OpenRetina',       unavailable: 'Networks predicting retinal spike responses. Nothing spatial' },
-  { id: 'vcornea',    label: 'V-Cornea',         unavailable: 'Corneal epithelium on a 200×90 lattice — 2D, z=0 for all 12,085 cells' },
-  { id: 'openeyesim', label: 'OpenEyeSim',       unavailable: 'No public download; the authors distribute it by email' },
-  { id: 'p2p',        label: 'pulse2percept',    unavailable: 'Implant electrode arrays (250 µm discs), not eye anatomy' },
-  { id: 'osb',        label: 'Open Source Brain', unavailable: 'NeuroML single-neuron morphologies, not ocular anatomy' },
 ];
 
 /** @type {string} the model the left pane shows when nothing usable is asked for. */
@@ -161,15 +150,14 @@ const DEFAULT_MODEL_ID = 'mesheye';
 
 /**
  * @param {string} id
- * @returns {AnatomyModel|undefined} undefined covers both an unknown id and a
- *   model flagged `unavailable` — the two are deliberately indistinguishable
- *   here, which is what makes this the availability test resolveModelId uses.
+ * @returns {AnatomyModel|undefined} undefined for an unknown or missing id,
+ *   which is the availability test resolveModelId uses.
  */
-const modelById = (id) => ANATOMY_MODELS.find((m) => m.id === id && !m.unavailable);
+const modelById = (id) => ANATOMY_MODELS.find((m) => m.id === id);
 
 /**
- * The `?model=` rule: an id that names an available model is honoured; anything
- * else (unknown, unavailable or missing) falls back to the default model.
+ * The `?model=` rule: an id that names a registered model is honoured; anything
+ * else (unknown or missing) falls back to the default model.
  * @param {string} [id]
  * @returns {string} always the id of a loadable model.
  */

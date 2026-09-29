@@ -139,8 +139,9 @@ proper rotation, so it stays a right eye) to match the others.
 
 ## Projects surveyed but not loadable
 
-These are listed, disabled, in the model menu rather than hidden, so it is clear
-they were considered. None ships 3D anatomical geometry:
+These were considered for the reference pane and rejected; this table is the
+record of that check. They are not offered in the model menu, which lists only
+what the pane can load. None ships 3D anatomical geometry:
 
 | Project | Why not | How that was checked |
 |---------|---------|----------------------|

@@ -151,7 +151,7 @@ export function buildStudyMenu(wb, samples) {
     const n = sample.structures.length;
     const item = document.createElement('button');
     item.className = 'study-item'; item.setAttribute('role', 'menuitem');
-    item.innerHTML = `<span class="ms">${sample.demo ? 'content_copy' : 'folder_open'}</span>
+    item.innerHTML = `<span class="ms">${sample.demo ? 'content_copy' : sample.imported ? 'upload_file' : 'folder_open'}</span>
       <span class="study-item-name">${sample.label}</span>
       <span class="study-item-meta mono">${n} layer${n === 1 ? '' : 's'}</span>`;
     item.addEventListener('click', () => { focusSample(wb, sample.id); closeStudyMenu(); });
