@@ -13,7 +13,7 @@ authors:
     orcid: 0009-0007-3121-2961
     affiliation: 1
   - name: Jian Gong
-    orcid: 0000-0000-0000-0000            # TODO: Jian's ORCID, or delete this line
+    orcid: 0000-0001-7214-1628
     affiliation: 2
 affiliations:
   - name: Del Norte High School, San Diego, CA, USA
