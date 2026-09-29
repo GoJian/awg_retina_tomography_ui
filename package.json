@@ -1,0 +1,48 @@
+{
+  "name": "awg-retina-tomography-ui",
+  "version": "1.0.0",
+  "description": "Interactive 3D web viewer for GeneLab AWG retina micro-tomography",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GoJian/awg_retina_tomography_ui.git"
+  },
+  "homepage": "https://kush1434.github.io/awg_retina_tomography_ui/",
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": "./core/index.js",
+    "./core/*.js": "./core/*.js",
+    "./core/*": "./core/*.js",
+    "./headless": "./core/adapters-headless.js",
+    "./browser": "./app/browser-adapters.js",
+    "./data-loader": "./data-loader.js",
+    "./asset-loader": "./asset-loader.js"
+  },
+  "files": [
+    "core",
+    "app/browser-adapters.js",
+    "data-loader.js",
+    "asset-loader.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "peerDependencies": {
+    "three": "^0.169.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js test/core/*.test.js",
+    "test:watch": "node --test --watch test/*.test.js test/core/*.test.js",
+    "test:e2e": "playwright test",
+    "serve": "python3 tools/dev-serve.py",
+    "bench": "node tools/bench/bench.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "three": "^0.169.0"
+  }
+}

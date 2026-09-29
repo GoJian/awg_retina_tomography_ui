@@ -3,1494 +3,82 @@
 //  Two linked Three.js scenes (eye-anatomy GLB | segmented layers) wrapped in a
 //  clinical instrument-panel UI: synced orbit, render modes (surface / wireframe
 //  / tri-planar slices via clipping planes), on-demand loading, caching & HUD.
+//  The scenes, the view state and every transition live in core/ (DOM-free);
+//  the view lives in app/ui/ (the chrome and the two panels, which render the
+//  workbench's events); this file is the controller entry: it builds the
+//  workbench with the browser adapters, reads the URL, turns the top-level
+//  controls into workbench calls and runs the frame loop.
 // ============================================================================
 
-import * as THREE from 'three';
-import { STLLoader } from 'three/addons/loaders/STLLoader.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-
-import { loadCSVData, probeSizes, resolveStructure, samplesData, formatBytes } from './data-loader.js?v=7';
-import { fetchBuffer, isCached, clearCache } from './asset-loader.js?v=7';
-
-// ---------------------------------------------------------------------------
-//  Config
-// ---------------------------------------------------------------------------
-const HF_BASE = 'https://huggingface.co/datasets/kush1434/awg_retina_tomography_ui/resolve/main';
-const HEAVY_BYTES = 400 * 1024 * 1024;
-const PLANE_COLORS = { x: 0x7bd88f, y: 0xebb46e, z: 0x78aaeb };  // sagittal / axial / coronal
-
-// ---------------------------------------------------------------------------
-//  Reference eye models
-// ---------------------------------------------------------------------------
-// The left pane can show any of several published open-source eye models. Each
-// ships as one Draco glTF with a named node per anatomical structure — see
-// optimized/anatomy/README.md for provenance and licences.
-//
-// Per structure: `key` matches the glTF node name. `coat` marks the structures
-// the µCT segmentation on the right also resolves, so the two panes can be read
-// against each other. `depth` is how deeply nested the structure sits
-// (0 = outermost); translucent shells are drawn back-faces outermost-in, then
-// front-faces innermost-out, which is what makes them blend in the right order.
-//
-// Models flagged `unavailable` are the remaining projects surveyed for this
-// pane. They are listed rather than hidden so it is clear they were considered
-// and why they cannot be rendered — they are simulation code or data-driven
-// models that ship no 3D anatomical geometry at all.
-
-// The cornea and aqueous are all but colourless in life; tinting them any
-// harder than this fogs the iris behind them to grey.
-const S = {
-  sclera:      { label: 'Sclera',                 group: 'Ocular coats',      color: 0xc6c0b2, opacity: 1.00, rough: 0.52, depth: 0, coat: true },
-  choroid:     { label: 'Choroid',                group: 'Ocular coats',      color: 0x8e2b3c, opacity: 1.00, rough: 0.58, depth: 1, coat: true },
-  retina:      { label: 'Retina',                 group: 'Ocular coats',      color: 0xd9634c, opacity: 1.00, rough: 0.62, depth: 2, coat: true },
-  cornea:      { label: 'Cornea',                 group: 'Anterior segment',  color: 0xd6edf5, opacity: 0.15, rough: 0.05, depth: 0 },
-  aqueous:     { label: 'Aqueous humour',         group: 'Anterior segment',  color: 0xd8f0f8, opacity: 0.05, rough: 0.05, depth: 1 },
-  iris:        { label: 'Iris',                   group: 'Anterior segment',  color: 0x8a5626, opacity: 1.00, rough: 0.70, depth: 2 },
-  zonules:     { label: 'Suspensory ligament',    group: 'Anterior segment',  color: 0xe6dfc9, opacity: 0.85, rough: 0.35, depth: 3 },
-  lens:        { label: 'Lens',                   group: 'Anterior segment',  color: 0xefdaa6, opacity: 0.82, rough: 0.10, depth: 3 },
-  vitreous:    { label: 'Vitreous humour',        group: 'Posterior segment', color: 0xbfe2f0, opacity: 0.09, rough: 0.08, depth: 3 },
-  lamina:      { label: 'Lamina cribrosa',        group: 'Optic nerve head',  color: 0x8fbe9a, opacity: 1.00, rough: 0.62, depth: 3 },
-  optic_nerve: { label: 'Optic nerve',            group: 'Optic nerve head',  color: 0xded3b8, opacity: 1.00, rough: 0.66, depth: 1 },
-  artery:      { label: 'Central retinal artery', group: 'Retinal vessels',   color: 0xc62f2f, opacity: 1.00, rough: 0.55, depth: 2 },
-  vein:        { label: 'Retinal vein',           group: 'Retinal vessels',   color: 0x4a5aa8, opacity: 1.00, rough: 0.55, depth: 2 },
-  globe:       { label: 'Globe (sclera)',         group: 'Globe',             color: 0xc6c0b2, opacity: 1.00, rough: 0.52, depth: 0, coat: true },
-  pupil:       { label: 'Cornea / pupil',         group: 'Globe',             color: 0x2b2f36, opacity: 1.00, rough: 0.30, depth: 1 },
-};
-// Anything not in S is an extraocular muscle, given as [key, label].
-const muscle = (label) => ({ label, group: 'Extraocular muscles', color: 0xb84540, opacity: 1.00, rough: 0.66, depth: 0 });
-const struct = (keys) => keys.map((k) => (Array.isArray(k)
-  ? { key: k[0], ...muscle(k[1]) }
-  : { key: k, ...S[k] }));
-
-const ANATOMY_MODELS = [
-  {
-    id: 'mesheye',
-    label: 'mesh.eye',
-    blurb: 'Human eyeball · 10 structures incl. lamina cribrosa',
-    url: 'optimized/anatomy/eye-anatomy.glb',
-    source: 'feelpp/mesh.eye', href: 'https://github.com/feelpp/mesh.eye', license: 'GPL-3.0', focus: 'sclera',
-    structures: struct(['sclera', 'choroid', 'retina', 'cornea', 'aqueous', 'iris', 'lens', 'vitreous', 'lamina', 'optic_nerve']),
-    presets: {
-      whole: { label: 'Whole eye', desc: 'Intact globe · clear cornea', hidden: [], opacity: {} },
-      coats: { label: 'Coats', desc: 'The three coats the µCT segments',
-        hidden: ['cornea', 'aqueous', 'iris', 'lens', 'vitreous'],
-        opacity: { sclera: 0.26, choroid: 0.62, retina: 1 } },
-      media: { label: 'Media', desc: 'The optical path, coats faded back', hidden: [],
-        opacity: { sclera: 0.10, choroid: 0.12, retina: 0.16, cornea: 0.45, aqueous: 0.26, vitreous: 0.2, lens: 0.95, iris: 1, optic_nerve: 0.5 } },
-    },
-  },
-  {
-    id: 'humaneye',
-    label: 'Feel++ CAD eye',
-    blurb: 'The CAD eye mesh.eye derives from · adds zonules & vessels',
-    url: 'optimized/anatomy/human-eye-cad.glb',
-    source: 'feelpp/mesh.eye', href: 'https://github.com/feelpp/mesh.eye', license: 'GPL-3.0', focus: 'sclera',
-    structures: struct(['sclera', 'choroid', 'retina', 'cornea', 'iris', 'zonules', 'lens', 'vitreous', 'artery', 'vein']),
-    presets: {
-      whole: { label: 'Whole eye', desc: 'Intact globe · clear cornea', hidden: [], opacity: {} },
-      coats: { label: 'Coats', desc: 'The three coats the µCT segments',
-        hidden: ['cornea', 'iris', 'zonules', 'lens', 'vitreous'],
-        opacity: { sclera: 0.26, choroid: 0.62, retina: 1, artery: 1, vein: 1 } },
-      media: { label: 'Media', desc: 'The optical path, coats faded back', hidden: [],
-        opacity: { sclera: 0.10, choroid: 0.12, retina: 0.16, cornea: 0.45, vitreous: 0.2, lens: 0.95, iris: 1, zonules: 1 } },
-    },
-  },
-  {
-    id: 'upat',
-    label: 'Upatras oculomotor',
-    blurb: 'Globe + the six extraocular muscles',
-    url: 'optimized/anatomy/upat-oculomotor.glb',
-    source: 'Upatras eye model', href: 'https://simtk.org/projects/eye', license: 'CC BY 4.0', focus: 'globe',
-    structures: struct(['globe', 'pupil',
-      ['lateral_rectus', 'Lateral rectus'], ['medial_rectus', 'Medial rectus'],
-      ['superior_rectus', 'Superior rectus'], ['inferior_rectus', 'Inferior rectus'],
-      ['superior_oblique', 'Superior oblique'], ['inferior_oblique', 'Inferior oblique']]),
-    presets: {
-      whole: { label: 'Whole', desc: 'Globe with all six muscles', hidden: [], opacity: {} },
-      muscles: { label: 'Muscles', desc: 'Muscles over a translucent globe', hidden: [],
-        opacity: { globe: 0.22, pupil: 0.5 } },
-      recti: { label: 'Recti', desc: 'The four recti only', hidden: ['superior_oblique', 'inferior_oblique'],
-        opacity: { globe: 0.3, pupil: 0.6 } },
-    },
-  },
-  // Surveyed, but none ships 3D eye geometry. Reasons are the checked facts,
-  // not guesses — see optimized/anatomy/README.md for how each was verified.
-  { id: 'isetbio',    label: 'ISETBio',          unavailable: 'MATLAB optics + cone mosaic. Zero mesh files in the repo' },
-  { id: 'openretina', label: 'OpenRetina',       unavailable: 'Networks predicting retinal spike responses. Nothing spatial' },
-  { id: 'vcornea',    label: 'V-Cornea',         unavailable: 'Corneal epithelium on a 200×90 lattice — 2D, z=0 for all 12,085 cells' },
-  { id: 'openeyesim', label: 'OpenEyeSim',       unavailable: 'No public download; the authors distribute it by email' },
-  { id: 'p2p',        label: 'pulse2percept',    unavailable: 'Implant electrode arrays (250 µm discs), not eye anatomy' },
-  { id: 'osb',        label: 'Open Source Brain', unavailable: 'NeuroML single-neuron morphologies, not ocular anatomy' },
-];
-
-const DEFAULT_MODEL_ID = 'mesheye';
-const modelById = (id) => ANATOMY_MODELS.find((m) => m.id === id && !m.unavailable);
+import { loadCSVData, probeSizes, samplesData } from './data-loader.js';
+import { fetchBuffer, isCached, clearCache } from './asset-loader.js';
+import { browserAdapters, mountPane } from './app/browser-adapters.js';
+import { setFill, toast, askConfirm, addHUD, wireViewEvents, buildStudyMenu, openStudyMenu, closeStudyMenu } from './app/ui/chrome.js';
+import { createLayerPanel } from './app/ui/layer-panel.js';
+import { createAnatomyPanel } from './app/ui/anatomy-panel.js';
+import { createWorkbench } from './core/index.js';
 
 // ---------------------------------------------------------------------------
 //  DOM
 // ---------------------------------------------------------------------------
 const $ = (s) => document.querySelector(s);
-const layerTree = $('#layer-tree');
 const viewportEl = $('#viewport');
 const glbPane = $('#pane-glb');
 const stlPane = $('#pane-stl');
 const divider = $('#divider');
-const glbOverlay = $('#glb-overlay');
-const stlEmpty = $('#stl-empty');
-const toastHost = $('#toast-host');
 const btnSync = $('#btn-sync');
 
 // ---------------------------------------------------------------------------
-//  Global view state
+//  Workbench
 // ---------------------------------------------------------------------------
-let renderMode = 'surface';                         // surface | wireframe | slices
-let layout = 'split';                               // split | overlay
-let globalOpacity = 1;
-let autoRotate = false;
-let linkOffsets = false;                            // move all sample offsets together
-const OVERLAY_TARGET = 100;                          // groups are normalised to this size
-const clipState = {
-  x: { on: false, pos: 0.5 },
-  y: { on: false, pos: 0.5 },
-  z: { on: false, pos: 0.5 },
-  flip: false,
-  showPlanes: true,
-};
-
-// ---------------------------------------------------------------------------
-//  Shared loaders
-// ---------------------------------------------------------------------------
-const dracoLoader = new DRACOLoader();
-dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
-const gltfLoader = new GLTFLoader();
-gltfLoader.setDRACOLoader(dracoLoader);
-const stlLoader = new STLLoader();
-
-// ---------------------------------------------------------------------------
-//  Pane factory
-// ---------------------------------------------------------------------------
-function createPane(mountEl) {
-  const scene = new THREE.Scene();
-
-  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-  scene.add(new THREE.HemisphereLight(0xcfe0ff, 0x141820, 0.6));
-  const key = new THREE.DirectionalLight(0xffffff, 1.05); key.position.set(1, 1.2, 1);
-  const fill = new THREE.DirectionalLight(0xbcd0ff, 0.45); fill.position.set(-1, -0.6, -0.8);
-  scene.add(key, fill);
-
-  const camera = new THREE.PerspectiveCamera(52, 1, 0.01, 1e7);
-  camera.position.set(0, 0, 100);
-
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, stencil: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.localClippingEnabled = true;
-  mountEl.appendChild(renderer.domElement);
-
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.08;
-  controls.autoRotateSpeed = 1.1;
-
-  const root = new THREE.Group();
-  scene.add(root);
-
-  // Slice helpers (clip planes, plane quads, bounding box, grid).
-  const clipPlanes = {
-    x: new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0),
-    y: new THREE.Plane(new THREE.Vector3(0, -1, 0), 0),
-    z: new THREE.Plane(new THREE.Vector3(0, 0, -1), 0),
-  };
-  const sliceGroup = new THREE.Group(); sliceGroup.visible = false; scene.add(sliceGroup);
-  const sliceQuads = {};
-  for (const ax of ['x', 'y', 'z']) {
-    const mat = new THREE.MeshBasicMaterial({ color: PLANE_COLORS[ax], transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false });
-    const q = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
-    q.userData.noClip = true;
-    if (ax === 'x') q.rotation.y = Math.PI / 2;
-    if (ax === 'y') q.rotation.x = Math.PI / 2;
-    sliceQuads[ax] = q; sliceGroup.add(q);
-  }
-  const boxHelper = new THREE.LineSegments(
-    new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
-    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.12 })
-  );
-  boxHelper.userData.noClip = true; boxHelper.visible = false; scene.add(boxHelper);
-
-  const grid = new THREE.GridHelper(1, 20, 0x2a3340, 0x1a2029);
-  grid.visible = false; grid.userData.noClip = true; scene.add(grid);
-
-  // Holds stencil-cap geometry that fills the sliced cross-sections (see buildCaps).
-  const capGroup = new THREE.Group(); capGroup.userData.noClip = true; scene.add(capGroup);
-
-  function size() {
-    const w = mountEl.clientWidth || 1, h = mountEl.clientHeight || 1;
-    renderer.setSize(w, h, false);
-    camera.aspect = w / h; camera.updateProjectionMatrix();
-  }
-  size();
-  new ResizeObserver(size).observe(mountEl);
-
-  return {
-    mountEl, scene, camera, renderer, controls, root,
-    clipPlanes, activeClips: [], sliceGroup, sliceQuads, boxHelper, grid, capGroup,
-    bounds: new THREE.Box3(), size, defaultDist: 100, capsEnabled: false,
-  };
-}
-
-const glb = createPane(glbPane);
-const stl = createPane(stlPane);
-stl.capsEnabled = true;   // the segmented-coat pane gets solid cross-section caps when sliced
-
-// The shared key light sits behind and to the right of the subject, which suits
-// the µCT coats but leaves the anatomy's interior — iris, lens, the inside of
-// the cornea — lit only by ambient, washing their colour out to grey. Give the
-// anatomy pane a soft headlight that tracks its camera, so whichever side you
-// orbit to is the side that's lit.
-glb.headLight = new THREE.DirectionalLight(0xfff6e8, 0.55);
-glb.scene.add(glb.headLight);
-const panes = [glb, stl];
-
-// The STL pane is the "overlay workspace": every sample is a normalised group
-// under stl.root, so samples stack on top of each other. In overlay layout the
-// eye anatomy is merged in as another group.
-const sampleGroups = new Map();     // sampleId -> THREE.Group
-const sampleCtlRefs = new Map();    // sampleId -> { ox, oy, oz } offset slider inputs
-const anatomyGroup = new THREE.Group();
-let anatomyObject = null;
-let stlFitted = false;
-const anatomyOffset = { x: 0, y: 0, z: 0 };
-let anatomyOpacity = 1;
-
-function getSampleGroup(sampleId) {
-  let g = sampleGroups.get(sampleId);
-  if (!g) { g = new THREE.Group(); g.userData.sampleId = sampleId; stl.root.add(g); sampleGroups.set(sampleId, g); }
-  return g;
-}
-
-// Bounding box of a node's *content*, ignoring the node's own transform.
-function localBox(node) {
-  const p = node.position.clone(), s = node.scale.clone(), q = node.quaternion.clone();
-  node.position.set(0, 0, 0); node.scale.set(1, 1, 1); node.quaternion.identity();
-  node.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(node);
-  node.position.copy(p); node.scale.copy(s); node.quaternion.copy(q);
-  node.updateMatrixWorld(true);
-  return box;
-}
-
-// Normalise a group to OVERLAY_TARGET, centre it at the origin, then apply the
-// group's offset (a fraction of the target size) so it can be stacked/separated.
-function normalizeGroupNode(node, offset = { x: 0, y: 0, z: 0 }) {
-  const box = localBox(node);
-  if (box.isEmpty()) return;
-  const c = box.getCenter(new THREE.Vector3());
-  const size = box.getSize(new THREE.Vector3());
-  const s = OVERLAY_TARGET / (Math.max(size.x, size.y, size.z) || 1);
-  node.scale.setScalar(s);
-  node.position.set(
-    offset.x * OVERLAY_TARGET - s * c.x,
-    offset.y * OVERLAY_TARGET - s * c.y,
-    offset.z * OVERLAY_TARGET - s * c.z
-  );
-}
-
-function normalizeSample(sampleId) {
-  const g = sampleGroups.get(sampleId);
-  const sample = findSample(sampleId);
-  if (g && sample) normalizeGroupNode(g, sample.offset);
-}
-
-// Set one sample's offset on an axis, syncing its slider UI + 3D group.
-function setSampleOffset(sample, ax, value) {
-  sample.offset[ax] = value;
-  const ref = sampleCtlRefs.get(sample.id);
-  if (ref && ref['o' + ax]) { ref['o' + ax].value = Math.round(value * 100); setFill(ref['o' + ax]); }
-  normalizeSample(sample.id);
-}
-
-// Apply an offset to the edited sample, or — when linked — to every sample.
-function offsetChanged(sample, ax, value) {
-  if (linkOffsets) samplesData.samples.forEach((s) => setSampleOffset(s, ax, value));
-  else setSampleOffset(sample, ax, value);
-  updateBounds(stl);
-}
-
-// Route the anatomy model to the correct place for the current layout:
-// its own left pane (split) or merged into the overlay workspace (overlay).
-function placeAnatomy() {
-  if (!anatomyObject) return;
-  anatomyObject.parent?.remove(anatomyObject);
-  if (layout === 'overlay') {
-    anatomyGroup.add(anatomyObject);
-    if (!anatomyGroup.parent) stl.root.add(anatomyGroup);
-    normalizeGroupNode(anatomyGroup, anatomyOffset);
-    updateBounds(stl);
-    fitStl(1.7);
-    applyRenderModeToPane(stl);
-  } else {
-    if (anatomyGroup.parent) stl.root.remove(anatomyGroup);
-    glb.root.add(anatomyObject);
-    fitBox(glb, anatomyFocusBox(), 1.75, ANATOMY_VIEW_DIR);
-    updateBounds(glb);
-    applyRenderModeToPane(glb);
-  }
-}
-
-function setLayout(mode) {
-  layout = mode;
-  document.querySelectorAll('#layout-seg .seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.layout === mode));
-  document.body.classList.toggle('overlay-layout', mode === 'overlay');
-  $('#overlay-ctl').hidden = mode !== 'overlay';
-  $('#layout-desc').textContent = mode === 'overlay' ? 'Everything superimposed & aligned' : 'Anatomy & layers side by side';
-  placeAnatomy();
-  // Re-size + re-fit after the pane reflows to its new width (twice, to be safe:
-  // once on the next frame, once after layout has fully settled).
-  const resize = () => {
-    glb.size(); stl.size();
-    if (sampleGroups.size || anatomyObject) { updateBounds(stl); fitStl(mode === 'overlay' ? 1.7 : 1.45); }
-  };
-  requestAnimationFrame(resize);
-  setTimeout(resize, 90);
-  applyRenderModeAll();
-}
-
-// ---------------------------------------------------------------------------
-//  Camera framing
-// ---------------------------------------------------------------------------
-function fitBox(pane, box, offset = 1.45, dir = null) {
-  if (box.isEmpty()) return;
-  const size = box.getSize(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
-  const maxDim = Math.max(size.x, size.y, size.z) || 1;
-
-  // Fit the model's enclosing sphere against whichever field of view is the
-  // tighter one. Honouring the *horizontal* FOV matters because these panes are
-  // tall and narrow: fitting only the vertical FOV — as this did originally —
-  // crops anything wider than it is tall, like the eye plus its optic nerve.
-  // `offset` keeps its old meaning, 1.45 being a snug fit.
-  const vFov = pane.camera.fov * (Math.PI / 180);
-  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * (pane.camera.aspect || 1));
-  const dist = ((maxDim / 2) / Math.sin(Math.min(vFov, hFov) / 2)) * (offset / 1.45);
-
-  pane.camera.near = Math.max(maxDim / 1000, 0.001);
-  pane.camera.far = maxDim * 1000;
-  pane.camera.updateProjectionMatrix();
-  pane.controls.target.copy(center);
-  pane.camera.position.copy(center).add((dir ? dir.clone().normalize() : new THREE.Vector3(0, 0, 1)).multiplyScalar(dist));
-  pane.controls.update();
-  pane.defaultDist = dist;
-}
-
-function fitToObject(pane, object, offset = 1.45) {
-  const box = new THREE.Box3().setFromObject(object);
-  if (box.isEmpty()) return;
-  fitBox(pane, box, offset);
-  updateBounds(pane);
-}
-
-// The STL workspace is framed on its sample groups (the subject); the anatomy,
-// which has far-reaching muscles/optic nerve, is context and may spill past.
-function stlWorkspaceBox() {
-  const box = new THREE.Box3();
-  for (const g of sampleGroups.values()) if (g.visible && g.children.length) box.expandByObject(g);
-  if (box.isEmpty()) box.setFromObject(stl.root);
-  return box;
-}
-// Frame the left pane on the globe rather than on everything: the optic nerve
-// runs ~8 mm past the sclera, and fitting that whole extent shrinks the eye
-// itself. Padded a little so the nerve still reads as it leaves the frame.
-// Open on a three-quarter anterior view: the model's cornea sits at -X, so
-// looking in from -X (and a little above and to the front) puts the cornea,
-// iris and pupil facing the viewer. A straight lateral view just shows a
-// featureless white globe.
-const ANATOMY_VIEW_DIR = new THREE.Vector3(-0.72, 0.26, 0.64);
-
-function anatomyFocusBox() {
-  const box = new THREE.Box3();
-  const globe = anatomyParts.get('sclera');
-  if (globe && globe.visible) box.setFromObject(globe);
-  if (box.isEmpty() && anatomyObject) box.setFromObject(anatomyObject);
-  return box;
-}
-
-function fitStl(offset = 1.45) {
-  const box = stlWorkspaceBox();
-  if (box.isEmpty()) return;
-  fitBox(stl, box, offset);
-  updateBounds(stl);
-}
-
-function resetPane(pane) {
-  if (pane === stl) fitStl(layout === 'overlay' ? 1.7 : 1.45);
-  else if (anatomyParts.size) fitBox(pane, anatomyFocusBox(), 1.75, ANATOMY_VIEW_DIR);
-  else if (pane.root.children.length) fitToObject(pane, pane.root);
-}
-function resetAll() { panes.forEach(resetPane); }
-
-// ---------------------------------------------------------------------------
-//  Slicing / clipping
-// ---------------------------------------------------------------------------
-function updateBounds(pane) {
-  if (!pane.root.children.length) return;
-  pane.bounds.setFromObject(pane.root);
-  const size = pane.bounds.getSize(new THREE.Vector3());
-  const center = pane.bounds.getCenter(new THREE.Vector3());
-
-  // bounding-cube wireframe
-  pane.boxHelper.scale.copy(size); pane.boxHelper.position.copy(center);
-  // grid floor at the base
-  const gmax = Math.max(size.x, size.z) * 1.2 || 1;
-  pane.grid.scale.set(gmax, 1, gmax);
-  pane.grid.position.set(center.x, pane.bounds.min.y, center.z);
-
-  updateClips(pane);
-}
-
-function updateClips(pane) {
-  if (pane.bounds.isEmpty()) return;
-  const { min, max } = pane.bounds;
-  const center = pane.bounds.getCenter(new THREE.Vector3());
-  const size = pane.bounds.getSize(new THREE.Vector3());
-  const sign = clipState.flip ? 1 : -1;
-  const axes = ['x', 'y', 'z'];
-  pane.activeClips = [];
-
-  for (const ax of axes) {
-    const pos = min[ax] + (max[ax] - min[ax]) * clipState[ax].pos;
-    const plane = pane.clipPlanes[ax];
-    plane.normal.set(ax === 'x' ? sign : 0, ax === 'y' ? sign : 0, ax === 'z' ? sign : 0);
-    plane.constant = sign === -1 ? pos : -pos;
-    if (clipState[ax].on) pane.activeClips.push(plane);
-
-    // position the visual quad at the cut
-    const q = pane.sliceQuads[ax];
-    if (ax === 'x') { q.position.set(pos, center.y, center.z); q.scale.set(size.z, size.y, 1); }
-    if (ax === 'y') { q.position.set(center.x, pos, center.z); q.scale.set(size.x, size.z, 1); }
-    if (ax === 'z') { q.position.set(center.x, center.y, pos); q.scale.set(size.x, size.y, 1); }
-    q.visible = clipState[ax].on;
-  }
-  applyRenderModeToPane(pane);
-}
-
-function applyRenderModeToPane(pane) {
-  const slicing = renderMode === 'slices';
-  pane.sliceGroup.visible = slicing && clipState.showPlanes;
-  pane.boxHelper.visible = slicing && !pane.bounds.isEmpty();
-  pane.scene.traverse((o) => {
-    if (!o.isMesh || o.userData.noClip) return;
-    const mats = Array.isArray(o.material) ? o.material : [o.material];
-    for (const m of mats) {
-      if (!m) continue;
-      m.wireframe = renderMode === 'wireframe';
-      m.clippingPlanes = slicing && pane.activeClips.length ? pane.activeClips : null;
-      m.clipIntersection = false;
-      // Anatomy shells manage their own side: translucent ones are split into a
-      // BackSide and a FrontSide pass so they blend in the correct order.
-      if (!m.userData?.anatomy) m.side = THREE.DoubleSide;
-      m.needsUpdate = true;
-    }
-  });
-  buildCaps(pane);
-}
-function applyRenderModeAll() { panes.forEach(applyRenderModeToPane); }
-
-// ---------------------------------------------------------------------------
-//  Clip-plane capping
-// ---------------------------------------------------------------------------
-// A sliced mesh is a hollow open shell: at the cut you see straight through it,
-// so adjacent coats read as separated by dark seams. For the (common) single
-// active plane, fill each coat's cross-section with a stencil-masked colored
-// quad so the cut renders as a solid, gap-free surface. Standard three.js
-// stencil-cap technique (back faces increment, front faces decrement, cap drawn
-// where the count != 0), one group per coat so each keeps its own colour.
-const _capQuadGeom = new THREE.PlaneGeometry(1, 1);
-function stencilMat(side, op, plane) {
-  const m = new THREE.MeshBasicMaterial();
-  m.depthWrite = false; m.depthTest = false; m.colorWrite = false;
-  m.side = side; m.clippingPlanes = [plane];
-  m.stencilWrite = true; m.stencilFunc = THREE.AlwaysStencilFunc;
-  m.stencilFail = op; m.stencilZFail = op; m.stencilZPass = op;
-  return m;
-}
-function clearCaps(pane) {
-  const g = pane.capGroup;
-  if (!g) return;
-  for (const c of g.children) {
-    const ms = Array.isArray(c.material) ? c.material : [c.material];
-    ms.forEach((m) => m && m.dispose());
-  }
-  g.clear();
-}
-function buildCaps(pane) {
-  if (!pane.capsEnabled) return;
-  clearCaps(pane);
-  // Caps belong to Solid fill; with it off the slice view stays the original
-  // uncapped coats. Cap only the single-plane case (the default); >1 plane uncapped.
-  if (!solidFill || renderMode !== 'slices' || pane.activeClips.length !== 1) return;
-  const plane = pane.activeClips[0];
-
-  pane.root.updateWorldMatrix(true, true);
-  const coats = [];
-  pane.root.traverse((o) => {
-    if (!o.isMesh || o.userData.noClip || !o.geometry || !o.material) return;
-    if (o.userData.anatomyBackOf) return;   // duplicate of its parent's geometry
-    let vis = o.visible, p = o.parent;
-    while (vis && p) { vis = p.visible; p = p.parent; }
-    if (!vis) return;
-    const mat = Array.isArray(o.material) ? o.material[0] : o.material;
-    coats.push({ mesh: o, color: mat.color });
-  });
-  if (!coats.length) return;
-
-  const size = pane.bounds.getSize(new THREE.Vector3());
-  const capSize = (Math.max(size.x, size.y, size.z) || 1) * 2.4;
-  const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), plane.normal.clone().normalize());
-  const pos = plane.normal.clone().multiplyScalar(-plane.constant);
-
-  let order = 100;
-  for (const { mesh, color } of coats) {
-    for (const [side, op] of [[THREE.BackSide, THREE.IncrementWrapStencilOp], [THREE.FrontSide, THREE.DecrementWrapStencilOp]]) {
-      const s = new THREE.Mesh(mesh.geometry, stencilMat(side, op, plane));
-      s.matrixAutoUpdate = false; s.matrixWorldAutoUpdate = false;
-      s.matrix.copy(mesh.matrixWorld); s.matrixWorld.copy(mesh.matrixWorld);
-      s.renderOrder = order; s.frustumCulled = false; s.userData.noClip = true;
-      pane.capGroup.add(s);
-    }
-    const capMat = new THREE.MeshBasicMaterial({ color: color.clone(), side: THREE.DoubleSide });
-    capMat.stencilWrite = true; capMat.stencilRef = 0; capMat.stencilFunc = THREE.NotEqualStencilFunc;
-    capMat.stencilFail = THREE.ReplaceStencilOp; capMat.stencilZFail = THREE.ReplaceStencilOp; capMat.stencilZPass = THREE.ReplaceStencilOp;
-    capMat.polygonOffset = true; capMat.polygonOffsetFactor = -order; capMat.polygonOffsetUnits = -1;
-    const cap = new THREE.Mesh(_capQuadGeom, capMat);
-    cap.scale.set(capSize, capSize, 1);
-    cap.quaternion.copy(quat);
-    cap.position.copy(pos);
-    cap.renderOrder = order + 1;
-    cap.frustumCulled = false; cap.userData.noClip = true;
-    cap.onAfterRender = (r) => r.clearStencil();
-    pane.capGroup.add(cap);
-    order += 3;
-  }
-}
-
-function setRenderMode(mode) {
-  renderMode = mode;
-  $('#render-mode').querySelectorAll('.seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
-  $('#slice-sec').hidden = mode !== 'slices';
-  // Entering Slices with nothing cut shows no slice — enable one for discoverability.
-  if (mode === 'slices' && !clipState.x.on && !clipState.y.on && !clipState.z.on) {
-    clipState.x.on = true;
-    const cb = document.querySelector('.slice-toggle input[data-axis="x"]');
-    if (cb) cb.checked = true;
-    panes.forEach(updateClips);
-  }
-  $('#mode-desc').textContent = {
-    surface: 'Shaded surface · solid meshes',
-    wireframe: 'Wireframe · edge view',
-    slices: 'Tri-planar MPR · orthogonal clipping',
-  }[mode];
-  $('#stat-mode').textContent = mode;
-  applyRenderModeAll();
-}
-
-// ---------------------------------------------------------------------------
-//  Sync (mirror orbit orientation only)
-// ---------------------------------------------------------------------------
-let syncEnabled = false, isSyncing = false;
-function applyOrientation(pane, az, polar) {
-  const dist = pane.controls.getDistance();
-  const t = pane.controls.target;
-  const sp = Math.sin(polar);
-  pane.camera.position.copy(t).add(new THREE.Vector3(sp * Math.sin(az), Math.cos(polar), sp * Math.cos(az)).multiplyScalar(dist));
-  pane.camera.lookAt(t);
-  pane.controls.update();
-}
-function mirror(from, to) {
-  if (isSyncing) return;
-  isSyncing = true;
-  applyOrientation(to, from.controls.getAzimuthalAngle(), from.controls.getPolarAngle());
-  isSyncing = false;
-}
-const glbToStl = () => mirror(glb, stl);
-const stlToGlb = () => mirror(stl, glb);
-function setSync(on) {
-  syncEnabled = on;
-  btnSync.setAttribute('aria-pressed', String(on));
-  document.body.classList.toggle('synced', on);
-  const label = btnSync.querySelector('.sync-toggle-label');
-  if (label) label.textContent = on ? 'Synced' : 'Sync views';
-  if (on) {
-    glb.controls.addEventListener('change', glbToStl);
-    stl.controls.addEventListener('change', stlToGlb);
-    mirror(glb, stl);
-  } else {
-    glb.controls.removeEventListener('change', glbToStl);
-    stl.controls.removeEventListener('change', stlToGlb);
-  }
-}
-
-// ---------------------------------------------------------------------------
-//  Materials
-// ---------------------------------------------------------------------------
-function makeMaterial(colorHex, opacity) {
-  return new THREE.MeshStandardMaterial({
-    color: colorHex, roughness: 0.82, metalness: 0.0,
-    transparent: opacity < 1, opacity, depthWrite: opacity >= 1, side: THREE.DoubleSide,
-  });
-}
-function applyColor(object, colorHex) {
-  object.traverse((c) => { if (c.isMesh && c.material) c.material.color.setHex(colorHex); });
-}
-function setObjectOpacity(object, o) {
-  object.traverse((c) => {
-    if (c.isMesh && c.material && !c.userData.noClip) {
-      c.material.opacity = o;
-      c.material.transparent = o < 1;
-      c.material.depthWrite = o >= 1;
-      c.renderOrder = o < 1 ? 1 : 0;
-      c.material.needsUpdate = true;
-    }
-  });
-}
-
-// Effective opacity = per-layer × per-sample × global.
-function reapplyOpacity(structure) {
-  const obj = featureObjects.get(structure.id);
-  if (!obj) return;
-  const sample = findSample(structure.sampleId);
-  setObjectOpacity(obj, structure.opacity * (sample?.opacity ?? 1) * globalOpacity);
-}
-
-// ---------------------------------------------------------------------------
-//  Layer loading
-// ---------------------------------------------------------------------------
-const featureObjects = new Map();
-const rowRefs = new Map();
-const inFlight = new Map();
-
-// "Solid fill" mode: swap the F10 ocular coats for their solid-slab variant,
-// which fills each coat inward to the next coat (no gaps, no hollow shells).
-// The variant meshes ship alongside the normal ones under optimized/<dir>_solid/.
-let solidFill = false;  // default OFF: show the original individual coats; toggle on for the filled+capped view
-function solidVariant(path) {
-  // Map any F10 coat path (remote HF original or local optimized) to the
-  // locally-shipped solid-fill slab, so the toggle works regardless of source.
-  const m = path && path.match(/F10_layers\/([^/?#]+\.glb)/i);
-  return m ? `optimized/F10_layers_solid/${m[1]}` : null;
-}
-function effectivePath(structure) {
-  if (solidFill) { const v = solidVariant(structure.path); if (v) return v; }
-  return structure.path;
-}
-function disposeObject(obj) {
-  obj.traverse((c) => {
-    if (c.isMesh) { c.geometry?.dispose(); if (Array.isArray(c.material)) c.material.forEach((m) => m.dispose()); else c.material?.dispose(); }
-  });
-}
-// Reload every currently-loaded F10 coat from the active variant, preserving
-// each row's visibility. Called when the Solid-fill toggle flips.
-async function reloadFillVariants() {
-  const affected = [...featureObjects.keys()]
-    .map((id) => findStructure(id))
-    .filter((st) => st && solidVariant(st.path));
-  clearCaps(stl);   // drop caps that reference geometry we're about to dispose
-  for (const st of affected) {
-    const obj = featureObjects.get(st.id);
-    const wasVisible = !!obj && obj.visible;
-    if (inFlight.has(st.id)) inFlight.get(st.id).abort();
-    if (obj) { obj.parent?.remove(obj); disposeObject(obj); featureObjects.delete(st.id); }
-    await loadLayer(st);
-    const fresh = featureObjects.get(st.id);
-    if (fresh) fresh.visible = wasVisible;
-  }
-  refreshStlEmpty();
-}
-
-async function loadLayer(structure) {
-  const refs = rowRefs.get(structure.id);
-  const url = effectivePath(structure);
-  const controller = new AbortController();
-  inFlight.set(structure.id, controller);
-  setRowState(refs, 'loading', 'Downloading… 0%');
-
-  try {
-    const buffer = await fetchBuffer(url, {
-      signal: controller.signal,
-      onProgress: ({ loaded, total, fromCache }) => {
-        if (fromCache) { setRowState(refs, 'loading', 'Loading from cache…'); return; }
-        const pct = total ? Math.round((loaded / total) * 100) : 0;
-        refs.bar.style.width = `${total ? Math.min(pct, 99) : 50}%`;
-        refs.status.textContent = total
-          ? `Downloading… ${pct}% (${formatBytes(loaded)} / ${formatBytes(total)})`
-          : `Downloading… ${formatBytes(loaded)}`;
-      },
-    });
-    setRowState(refs, 'loading', 'Building mesh…');
-    refs.bar.style.width = '100%';
-
-    const object = structure.kind === 'gltf' ? await parseGLTF(buffer) : parseSTL(buffer, structure);
-    object.userData.id = structure.id;
-    featureObjects.set(structure.id, object);
-    const isNewGroup = !sampleGroups.has(structure.sampleId);
-    getSampleGroup(structure.sampleId).add(object);
-    applyColor(object, structure.color);
-    normalizeSample(structure.sampleId);
-    reapplyOpacity(structure);
-
-    updateBounds(stl);
-    if (!stlFitted || isNewGroup) { fitStl(layout === 'overlay' ? 1.7 : 1.45); stlFitted = true; }
-    applyRenderModeToPane(stl);
-    refreshStlEmpty();
-    setRowState(refs, 'loaded', (await isCached(url)) ? 'Loaded · cached' : 'Loaded');
-  } catch (err) {
-    if (err.name === 'AbortError') setRowState(refs, 'idle', '');
-    else {
-      console.error(`Layer "${structure.label}" failed:`, err);
-      setRowState(refs, 'error', 'Failed to load');
-      toast(`Couldn't load "${structure.label}". ${err.message}`, 'error');
-      refs.checkbox.checked = false;
-    }
-  } finally {
-    inFlight.delete(structure.id);
-  }
-}
-
-function parseSTL(buffer, structure) {
-  const geometry = stlLoader.parse(buffer);
-  geometry.computeVertexNormals();
-  return new THREE.Mesh(geometry, makeMaterial(structure.color, structure.opacity));
-}
-function parseGLTF(buffer) {
-  return new Promise((resolve, reject) => {
-    gltfLoader.parse(buffer, '', (gltf) => {
-      gltf.scene.traverse((c) => {
-        if (c.isMesh) {
-          c.frustumCulled = false;
-          if (!c.geometry.attributes.normal) c.geometry.computeVertexNormals();
-          c.material = makeMaterial(0xffffff, 1);
-        }
-      });
-      resolve(gltf.scene);
-    }, reject);
-  });
-}
-
-// ---------------------------------------------------------------------------
-//  Anatomy GLB (left pane) — lazy
-// ---------------------------------------------------------------------------
-let anatomyController = null;
-
-// Which reference model the left pane is showing. `?model=<id>` picks one at
-// load; `?anatomy=<url>` still overrides the file outright, for a model that
-// isn't in the registry.
-let activeModelId = (() => {
-  const q = new URLSearchParams(location.search).get('model');
-  return modelById(q) ? q : DEFAULT_MODEL_ID;
-})();
-const activeModel = () => modelById(activeModelId) || ANATOMY_MODELS[0];
-
-function resolveAnatomyURL() {
-  return new URLSearchParams(location.search).get('anatomy') || activeModel().url;
-}
-
-// Switch models: drop the current one entirely (geometry, materials, per-
-// structure state) and load the new one in its place.
-async function setAnatomyModel(id) {
-  if (!modelById(id) || id === activeModelId) return;
-  anatomyController?.abort();
-  activeModelId = id;
-
-  if (anatomyObject) {
-    anatomyObject.parent?.remove(anatomyObject);
-    disposeObject(anatomyObject);
-    anatomyObject = null;
-  }
-  anatomyParts.clear();
-  anatomyState.clear();
-  anatomyRowRefs.clear();
-  anatomyPreset = 'whole';
-  glb.root.clear();
-
-  const url = new URL(location.href);
-  if (id === DEFAULT_MODEL_ID) url.searchParams.delete('model');
-  else url.searchParams.set('model', id);
-  history.replaceState(null, '', url);
-
-  syncModelMenu();
-  buildAnatomyTree();
-  await loadAnatomy();
-}
-
-async function loadAnatomy() {
-  const url = resolveAnatomyURL();
-  anatomyController = new AbortController();
-  renderOverlay('loading', { pct: 0, label: 'Starting…' });
-  try {
-    const buffer = await fetchBuffer(url, {
-      signal: anatomyController.signal,
-      onProgress: ({ loaded, total, fromCache }) => {
-        if (fromCache) return renderOverlay('loading', { pct: 100, label: 'Loading from cache…' });
-        const pct = total ? Math.round((loaded / total) * 100) : 0;
-        renderOverlay('loading', { pct, label: total ? `${pct}% · ${formatBytes(loaded)} / ${formatBytes(total)}` : formatBytes(loaded) });
-      },
-    });
-    renderOverlay('loading', { pct: 100, label: 'Building model…' });
-    const scene = await parseGLTF_anatomy(buffer);
-    glb.root.clear();
-    anatomyObject = scene;
-    registerAnatomyParts(scene);
-    buildAnatomyTree();
-    placeAnatomy();
-    glbOverlay.classList.add('hidden');
-  } catch (err) {
-    if (err.name === 'AbortError') { renderOverlay('idle'); return; }
-    console.error('Anatomy GLB failed:', err);
-    renderOverlay('error', { message: err.message });
-    toast(`Couldn't load the eye-anatomy model. ${err.message}`, 'error');
-  } finally {
-    anatomyController = null;
-  }
-}
-function parseGLTF_anatomy(buffer) {
-  return new Promise((resolve, reject) => {
-    gltfLoader.parse(buffer, '', (gltf) => {
-      gltf.scene.traverse((c) => {
-        if (!c.isMesh) return;
-        c.frustumCulled = false;
-        if (!c.geometry.attributes.normal) c.geometry.computeVertexNormals();
-      });
-      resolve(gltf.scene);
-    }, reject);
-  });
-}
-
-// ---------------------------------------------------------------------------
-//  Anatomy structures — per-structure meshes, colour & opacity
-// ---------------------------------------------------------------------------
-const anatomyParts = new Map();     // key -> THREE.Mesh
-const anatomyState = new Map();     // key -> { visible, color, opacity }
-const anatomyRowRefs = new Map();   // key -> { row, checkbox, swatch, colorInput, opacity }
-let anatomyPreset = 'whole';
-
-// Structure metadata for the model currently loaded.
-const anatomyMeta = (key) => activeModel().structures.find((s) => s.key === key);
-
-function anatomyStateFor(key) {
-  let st = anatomyState.get(key);
-  if (!st) {
-    const d = anatomyMeta(key) || { color: 0xffffff, opacity: 1 };
-    st = { visible: true, color: d.color, opacity: d.opacity };
-    anatomyState.set(key, st);
-  }
-  return st;
-}
-
-// Match each mesh in the GLB to its structure by glTF node name. The exporter
-// names both the node and the mesh, but a loader may hang the name on either,
-// so check the mesh and then walk up to the nearest named ancestor.
-function anatomyKeyOf(mesh) {
-  for (let o = mesh; o; o = o.parent) {
-    const k = (o.name || '').trim().toLowerCase();
-    if (anatomyMeta(k)) return k;
-  }
-  return null;
-}
-
-function registerAnatomyParts(scene) {
-  anatomyParts.clear();
-  const unmatched = [];
-  scene.traverse((o) => {
-    if (!o.isMesh || o.userData.anatomyBackOf) return;
-    const key = anatomyKeyOf(o);
-    if (key) { anatomyParts.set(key, o); o.userData.anatomyKey = key; }
-    else unmatched.push(o.name || '(unnamed)');
-  });
-
-  if (!anatomyParts.size) {
-    // A custom model supplied via ?anatomy= won't carry our node names. Leave it
-    // alone rather than colouring it wrong — it still renders, just without the
-    // per-structure panel.
-    console.warn('Anatomy model has no recognised structure names; per-structure controls disabled.', unmatched);
-    setObjectOpacity(scene, anatomyOpacity);
-    return;
-  }
-  if (unmatched.length) console.warn('Anatomy meshes with no matching structure:', unmatched);
-
-  for (const key of anatomyParts.keys()) applyAnatomyStyle(key);
-}
-
-// These structures are nested, near-convex shells that all share a centre, so
-// three.js's per-object back-to-front sort can't order them — every shell has a
-// near half and a far half at the same object distance, and the result is a
-// flat, obviously-wrong overlap. Render each translucent shell twice instead:
-// its back faces first (outermost shell first), then its front faces (innermost
-// first). That is the correct far-to-near order for concentric shells.
+// core/workbench.js owns the two panes, the camera sync, the layer and
+// anatomy controllers and the view state; the WebGL renderer, DOM-wired
+// OrbitControls and ResizeObserver come from app/browser-adapters.js. The
+// core talks outward only through wb.on(...) and the listeners (wired in
+// init) render each transition into the DOM.
 //
-//   back faces:  10 + depth   (sclera 10, choroid 11, retina 12, lens 13 …)
-//   front faces: 90 - depth   (lens 87,   retina 88,  choroid 89, sclera 90)
-//
-// Opaque structures skip all of this and just depth-test normally.
-function anatomyBackMesh(mesh) {
-  let back = mesh.userData.backMesh;
-  if (!back) {
-    back = new THREE.Mesh(mesh.geometry, makeMaterial(0xffffff, 1));
-    back.material.userData.anatomy = true;
-    back.frustumCulled = false;
-    back.userData.anatomyBackOf = mesh.userData.anatomyKey;
-    mesh.userData.backMesh = back;
-    mesh.add(back);
-  }
-  return back;
-}
+// `?model=<id>` picks a registry model for the reference eye at load;
+// `?anatomy=<url>` still overrides the file outright, for a model that isn't
+// in the registry. Both are read once, here.
+const params = new URLSearchParams(location.search);
+const io = { fetchBuffer, isCached };
+const wb = createWorkbench({
+  adapters: { glb: browserAdapters(glbPane), stl: browserAdapters(stlPane) },
+  io,
+  modelId: params.get('model'),
+  anatomyUrl: params.get('anatomy'),
+  startTime: performance.now(),
+});
+const mounts = { glb: mountPane(wb.panes.glb, glbPane), stl: mountPane(wb.panes.stl, stlPane) };
 
-// Effective alpha = the structure's own opacity x the pane-level anatomy opacity.
-function applyAnatomyStyle(key) {
-  const mesh = anatomyParts.get(key);
-  if (!mesh) return;
-  const st = anatomyStateFor(key);
-  const meta = anatomyMeta(key);
-  const depth = meta?.depth ?? 0;
-  const alpha = st.opacity * anatomyOpacity;
-  const translucent = alpha < 0.999;
-
-  if (!mesh.material?.userData?.anatomy) {
-    mesh.material?.dispose?.();
-    mesh.material = makeMaterial(st.color, alpha);
-    mesh.material.userData.anatomy = true;
-  }
-  const m = mesh.material;
-  m.color.setHex(st.color);
-  m.roughness = meta?.rough ?? 0.72;
-  m.opacity = alpha;
-  m.transparent = translucent;
-  m.depthWrite = !translucent;
-  m.side = translucent ? THREE.FrontSide : THREE.DoubleSide;
-  m.needsUpdate = true;
-  mesh.renderOrder = translucent ? 90 - depth : 0;
-  mesh.visible = st.visible;
-
-  const back = anatomyBackMesh(mesh);
-  const bm = back.material;
-  bm.color.setHex(st.color);
-  bm.roughness = meta?.rough ?? 0.72;
-  bm.opacity = alpha;
-  bm.transparent = true;
-  bm.depthWrite = false;
-  bm.side = THREE.BackSide;
-  bm.needsUpdate = true;
-  back.renderOrder = 10 + depth;
-  back.visible = translucent;
-}
-function applyAnatomyStyleAll() { for (const key of anatomyParts.keys()) applyAnatomyStyle(key); }
-
-function setAnatomyPreset(name) {
-  const model = activeModel();
-  const preset = model.presets?.[name];
-  if (!preset) return;
-  anatomyPreset = name;
-  for (const s of model.structures) {
-    const st = anatomyStateFor(s.key);
-    st.visible = !preset.hidden.includes(s.key);
-    st.opacity = preset.opacity[s.key] ?? s.opacity;
-  }
-  applyAnatomyStyleAll();
-  syncAnatomyRows();
-  document.querySelectorAll('#anatomy-preset .seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.preset === name));
-  const desc = $('#anatomy-preset-desc');
-  if (desc) desc.textContent = preset.desc;
-  buildCaps(glb);
-}
-
-function syncAnatomyRows() {
-  for (const [key, refs] of anatomyRowRefs) {
-    const st = anatomyStateFor(key);
-    refs.checkbox.checked = st.visible;
-    refs.opacity.value = String(Math.round(st.opacity * 100));
-    setFill(refs.opacity);
-    const hex = `#${st.color.toString(16).padStart(6, '0')}`;
-    refs.swatch.style.background = hex;
-    refs.colorInput.value = hex;
-    refs.row.classList.toggle('is-off', !st.visible);
-  }
-}
+// The two panels keep their own row elements and render the layer / anatomy
+// events onto them; they share the asset I/O with the workbench so a cached
+// mesh is recognised the same way on both sides.
+const layerPanel = createLayerPanel(wb, io);
+const anatomyPanel = createAnatomyPanel(wb, io);
 
 // ---------------------------------------------------------------------------
-//  GLB overlay state machine
+//  URL ↔ anatomy model
 // ---------------------------------------------------------------------------
-async function renderOverlay(state, data = {}) {
-  glbOverlay.classList.remove('hidden');
-  if (state === 'idle') {
-    const cached = await isCached(resolveAnatomyURL());
-    glbOverlay.innerHTML = `
-      <div class="overlay-card">
-        <span class="ms overlay-icon">visibility</span>
-        <div class="overlay-title">${activeModel().label}</div>
-        <div class="overlay-sub">${activeModel().blurb}${cached ? ' · cached' : ''}</div>
-        <button class="btn btn-primary" id="overlay-load">Load model</button>
-      </div>`;
-    glbOverlay.querySelector('#overlay-load').onclick = loadAnatomy;
-  } else if (state === 'loading') {
-    glbOverlay.innerHTML = `
-      <div class="overlay-card">
-        <div class="overlay-title">Loading eye anatomy</div>
-        <div class="progress"><div class="progress-fill" style="width:${data.pct || 0}%"></div></div>
-        <div class="overlay-sub">${data.label || ''}</div>
-        <button class="btn btn-ghost" id="overlay-cancel">Cancel</button>
-      </div>`;
-    glbOverlay.querySelector('#overlay-cancel').onclick = () => anatomyController?.abort();
-  } else if (state === 'error') {
-    glbOverlay.innerHTML = `
-      <div class="overlay-card">
-        <div class="overlay-title">Couldn't load model</div>
-        <div class="overlay-sub">${data.message || ''}</div>
-        <button class="btn btn-primary" id="overlay-retry">Try again</button>
-      </div>`;
-    glbOverlay.querySelector('#overlay-retry').onclick = loadAnatomy;
-  }
-}
-
-// ---------------------------------------------------------------------------
-//  Layer tree
-// ---------------------------------------------------------------------------
-function setRowState(refs, state, status) {
-  if (!refs) return;
-  refs.row.dataset.state = state;
-  refs.status.textContent = status || '';
-  if (state !== 'loading') refs.bar.style.width = state === 'loaded' ? '100%' : '0%';
-  refs.progress.style.display = state === 'loading' ? 'block' : 'none';
-}
-
-// Each model brings its own presets, so the segmented control is rebuilt when
-// the model changes.
-function buildPresetButtons() {
-  const host = $('#anatomy-preset');
-  if (!host) return;
-  const presets = activeModel().presets || {};
-  const names = Object.keys(presets);
-  host.innerHTML = '';
-  host.classList.toggle('seg-2', names.length === 2);
-  for (const name of names) {
-    const b = document.createElement('button');
-    b.className = 'seg-btn' + (name === anatomyPreset ? ' active' : '');
-    b.dataset.preset = name;
-    b.textContent = presets[name].label;
-    b.addEventListener('click', () => setAnatomyPreset(name));
-    host.appendChild(b);
-  }
-  const desc = $('#anatomy-preset-desc');
-  if (desc) desc.textContent = presets[anatomyPreset]?.desc || '';
-}
-
-// The model menu lists every project surveyed for this pane. The ones with no
-// 3D geometry stay in the list, disabled, with the reason — otherwise it looks
-// like they were simply forgotten.
-function buildModelMenu() {
-  const menu = $('#model-menu');
-  if (!menu) return;
-  menu.innerHTML = '';
-  for (const m of ANATOMY_MODELS) {
-    const item = document.createElement('button');
-    item.className = 'model-item';
-    item.dataset.modelId = m.id;
-    item.disabled = !!m.unavailable;
-    item.innerHTML =
-      `<span class="model-name">${m.label}</span>` +
-      `<span class="model-sub">${m.unavailable || m.blurb}</span>` +
-      (m.unavailable ? '' : `<span class="model-lic mono">${m.license}</span>`);
-    if (!m.unavailable) {
-      item.addEventListener('click', () => { menu.classList.remove('open'); setAnatomyModel(m.id); });
-    }
-    menu.appendChild(item);
-  }
-  syncModelMenu();
-}
-
-function syncModelMenu() {
-  const m = activeModel();
-  const label = $('#model-label');
-  if (label) label.textContent = m.label;
-  const src = $('#anatomy-source');
-  if (src) {
-    src.innerHTML = m.href
-      ? `<a href="${m.href}" target="_blank" rel="noopener">${m.source} ↗</a> · ${m.license}`
-      : `${m.source} · ${m.license}`;
-  }
-  document.querySelectorAll('#model-menu .model-item').forEach((b) => {
-    b.classList.toggle('active', b.dataset.modelId === activeModelId);
+// A model switch: the URL mirrors the choice, then the panel's menu and (now
+// empty) tree follow — all before the new model starts downloading. This
+// listener is registered ahead of the panel's so the URL lands first.
+function wireAnatomyUrl() {
+  wb.on('anatomy:model', ({ id, isDefault }) => {
+    const url = new URL(location.href);
+    if (isDefault) url.searchParams.delete('model');
+    else url.searchParams.set('model', id);
+    history.replaceState(null, '', url);
   });
-}
-
-// The anatomy panel mirrors the layer tree on the right: one row per structure
-// with a visibility box, a recolourable swatch and an opacity slider.
-function buildAnatomyTree() {
-  const host = $('#anatomy-tree');
-  if (!host) return;
-  host.innerHTML = '';
-  anatomyRowRefs.clear();
-
-  buildPresetButtons();
-  if (!anatomyParts.size) { const c = $('#anatomy-count'); if (c) c.textContent = '—'; return; }
-
-  let lastGroup = null;
-  for (const s of activeModel().structures) {
-    if (!anatomyParts.has(s.key)) continue;
-    if (s.group !== lastGroup) {
-      const h = document.createElement('div');
-      h.className = 'anat-group';
-      h.textContent = s.group;
-      host.appendChild(h);
-      lastGroup = s.group;
-    }
-    host.appendChild(buildAnatomyRow(s));
-  }
-  syncAnatomyRows();
-  const count = $('#anatomy-count');
-  if (count) count.textContent = anatomyParts.size;
-}
-
-function buildAnatomyRow(s) {
-  const st = anatomyStateFor(s.key);
-  const hex = `#${st.color.toString(16).padStart(6, '0')}`;
-
-  const row = document.createElement('div');
-  row.className = 'layer-row anat-row';
-  row.dataset.state = 'loaded';
-
-  const checkbox = document.createElement('input');
-  checkbox.type = 'checkbox'; checkbox.className = 'layer-check';
-  checkbox.id = `anat-${s.key}`; checkbox.checked = st.visible;
-
-  const swatch = document.createElement('button');
-  swatch.className = 'layer-swatch'; swatch.style.background = hex; swatch.title = 'Change colour';
-  const colorInput = document.createElement('input');
-  colorInput.type = 'color'; colorInput.value = hex; colorInput.className = 'layer-color-input';
-
-  const label = document.createElement('label');
-  label.className = 'layer-label'; label.htmlFor = checkbox.id;
-  label.innerHTML = `<span class="layer-name">${s.label}</span>` +
-    (s.coat ? '<span class="coat-tag" title="Also segmented from the µCT scan in the right-hand pane">µCT</span>' : '');
-
-  const opacity = document.createElement('input');
-  opacity.type = 'range'; opacity.min = '0'; opacity.max = '100';
-  opacity.value = String(Math.round(st.opacity * 100));
-  opacity.className = 'layer-opacity'; opacity.title = 'Opacity';
-  setFill(opacity);
-
-  const top = document.createElement('div');
-  top.className = 'layer-top';
-  top.append(checkbox, swatch, colorInput, label, opacity);
-  row.appendChild(top);
-
-  checkbox.addEventListener('change', () => {
-    st.visible = checkbox.checked;
-    row.classList.toggle('is-off', !st.visible);
-    applyAnatomyStyle(s.key);
-    buildCaps(glb);
-  });
-  swatch.addEventListener('click', () => colorInput.click());
-  colorInput.addEventListener('input', (e) => {
-    swatch.style.background = e.target.value;
-    st.color = parseInt(e.target.value.slice(1), 16);
-    applyAnatomyStyle(s.key);
-    buildCaps(glb);
-  });
-  opacity.addEventListener('input', () => {
-    setFill(opacity);
-    st.opacity = Number(opacity.value) / 100;
-    applyAnatomyStyle(s.key);
-  });
-
-  anatomyRowRefs.set(s.key, { row, checkbox, swatch, colorInput, opacity });
-  return row;
-}
-
-function buildLayerTree() {
-  layerTree.innerHTML = '';
-  let count = 0;
-  for (const sample of samplesData.samples) {
-    const group = document.createElement('div');
-    group.className = 'sample';
-    group.dataset.sampleId = sample.id;
-    if (sample.demo) group.classList.add('is-demo');
-
-    const headRow = document.createElement('div');
-    headRow.className = 'sample-head-row';
-    const head = document.createElement('button');
-    head.className = 'sample-head open';
-    head.innerHTML = `<span class="caret">▸</span><span class="sample-name">${sample.label}</span>`;
-    const vis = document.createElement('input');
-    vis.type = 'checkbox'; vis.className = 'sample-vis'; vis.checked = true; vis.title = 'Show / hide whole sample';
-    const gear = document.createElement('button');
-    gear.className = 'sample-gear icon-btn'; gear.title = 'Position & opacity';
-    gear.innerHTML = '<span class="ms">tune</span>';
-    headRow.append(head, vis, gear);
-    if (sample.link) {
-      const a = document.createElement('a');
-      a.className = 'sample-src'; a.href = sample.link; a.target = '_blank'; a.rel = 'noopener'; a.title = 'Source dataset'; a.textContent = '↗';
-      headRow.appendChild(a);
-    }
-
-    const ctl = buildSampleControls(sample);
-    const body = document.createElement('div');
-    body.className = 'sample-body open';
-
-    head.addEventListener('click', () => { head.classList.toggle('open'); body.classList.toggle('open'); });
-    vis.addEventListener('change', () => { const g = sampleGroups.get(sample.id); if (g) g.visible = vis.checked; });
-    gear.addEventListener('click', () => { ctl.hidden = !ctl.hidden; gear.classList.toggle('active', !ctl.hidden); });
-
-    for (const st of sample.structures) { body.appendChild(buildRow(st)); count++; }
-    group.append(headRow, ctl, body);
-    layerTree.appendChild(group);
-  }
-  $('#layer-count').textContent = count;
-  $('#meta-layers').textContent = count;
-  $('#live-label').textContent = `${count} LAYER${count === 1 ? '' : 'S'}`;
-  if (samplesData.samples[0]) {
-    $('#meta-sample').textContent = samplesData.samples[0].label;
-    $('#study-label').textContent = `${samplesData.samples[0].label.toUpperCase()} · µCT · SEG`;
-  }
-}
-
-// Per-sample transform panel: opacity + X/Y/Z offset (stack/separate) + reset.
-function buildSampleControls(sample) {
-  const wrap = document.createElement('div');
-  wrap.className = 'sample-ctl'; wrap.hidden = true;
-  wrap.innerHTML = `
-    ${sample.demo ? '<div class="demo-badge">synthetic demo copy</div>' : ''}
-    <div class="ctl-line"><span>Opacity</span><input type="range" class="slider s-op" min="0" max="100" value="${Math.round(sample.opacity * 100)}"></div>
-    <div class="ctl-line"><span>Offset X</span><input type="range" class="slider s-ox" min="-100" max="100" value="${sample.offset.x * 100}"></div>
-    <div class="ctl-line"><span>Offset Y</span><input type="range" class="slider s-oy" min="-100" max="100" value="${sample.offset.y * 100}"></div>
-    <div class="ctl-line"><span>Offset Z</span><input type="range" class="slider s-oz" min="-100" max="100" value="${sample.offset.z * 100}"></div>
-    <button class="link-btn s-reset">Reset position</button>`;
-
-  const op = wrap.querySelector('.s-op'); setFill(op);
-  op.addEventListener('input', () => { setFill(op); sample.opacity = Number(op.value) / 100; sample.structures.forEach(reapplyOpacity); });
-
-  const refs = {};
-  for (const [ax, sel] of [['x', '.s-ox'], ['y', '.s-oy'], ['z', '.s-oz']]) {
-    const sl = wrap.querySelector(sel); setFill(sl); refs['o' + ax] = sl;
-    sl.addEventListener('input', () => { setFill(sl); offsetChanged(sample, ax, Number(sl.value) / 100); });
-  }
-  sampleCtlRefs.set(sample.id, refs);
-
-  wrap.querySelector('.s-reset').addEventListener('click', () => {
-    const targets = linkOffsets ? samplesData.samples : [sample];
-    for (const s of targets) for (const ax of ['x', 'y', 'z']) setSampleOffset(s, ax, 0);
-    updateBounds(stl);
-  });
-  return wrap;
-}
-
-function buildRow(structure) {
-  const row = document.createElement('div');
-  row.className = 'layer-row'; row.dataset.state = 'idle';
-  const hex = `#${structure.color.toString(16).padStart(6, '0')}`;
-
-  const checkbox = document.createElement('input');
-  checkbox.type = 'checkbox'; checkbox.className = 'layer-check'; checkbox.id = `chk-${structure.id}`;
-
-  const swatch = document.createElement('button');
-  swatch.className = 'layer-swatch'; swatch.style.background = hex; swatch.title = 'Change colour';
-  const colorInput = document.createElement('input');
-  colorInput.type = 'color'; colorInput.value = hex; colorInput.className = 'layer-color-input';
-
-  const label = document.createElement('label');
-  label.className = 'layer-label'; label.htmlFor = checkbox.id;
-  label.innerHTML = `<span class="layer-name">${structure.label}</span><span class="layer-size"></span>`;
-
-  const opacity = document.createElement('input');
-  opacity.type = 'range'; opacity.min = '0'; opacity.max = '100';
-  opacity.value = String(Math.round(structure.opacity * 100));
-  opacity.className = 'layer-opacity'; opacity.title = 'Opacity';
-  setFill(opacity);
-
-  const progress = document.createElement('div');
-  progress.className = 'layer-progress'; progress.style.display = 'none';
-  const bar = document.createElement('div'); bar.className = 'layer-bar'; progress.appendChild(bar);
-  const status = document.createElement('div'); status.className = 'layer-status';
-
-  const top = document.createElement('div'); top.className = 'layer-top';
-  top.append(checkbox, swatch, colorInput, label, opacity);
-  row.append(top, progress, status);
-
-  const refs = { row, bar, status, progress, checkbox, sizeEl: label.querySelector('.layer-size') };
-  rowRefs.set(structure.id, refs);
-
-  swatch.addEventListener('click', () => colorInput.click());
-  colorInput.addEventListener('input', (e) => {
-    swatch.style.background = e.target.value;
-    structure.color = parseInt(e.target.value.slice(1), 16);
-    const obj = featureObjects.get(structure.id);
-    if (obj) applyColor(obj, structure.color);
-    buildCaps(stl);
-  });
-  opacity.addEventListener('input', (e) => {
-    setFill(e.target);
-    structure.opacity = Number(e.target.value) / 100;
-    reapplyOpacity(structure);
-  });
-
-  checkbox.addEventListener('change', async () => {
-    const existing = featureObjects.get(structure.id);
-    if (checkbox.checked) {
-      if (existing) { existing.visible = true; refreshStlEmpty(); return; }
-      if (!structure._resolved) {
-        setRowState(rowRefs.get(structure.id), 'loading', 'Checking…');
-        await resolveStructure(structure);
-        annotateSize(structure);
-        if (!checkbox.checked) { setRowState(rowRefs.get(structure.id), 'idle', ''); return; }
-      }
-      if (structure.bytes && structure.bytes > HEAVY_BYTES && !(await isCached(structure.path))) {
-        const ok = await askConfirm({ title: 'Large layer', message: `“${structure.label}” is ${formatBytes(structure.bytes)}. It will download once and then be cached. Continue?`, confirmLabel: 'Download' });
-        if (!ok) { checkbox.checked = false; return; }
-      }
-      loadLayer(structure);
-    } else {
-      if (inFlight.has(structure.id)) inFlight.get(structure.id).abort();
-      if (existing) existing.visible = false;
-      refreshStlEmpty();
-    }
-  });
-  return row;
-}
-
-function annotateSize(structure) {
-  const refs = rowRefs.get(structure.id);
-  if (refs && structure.bytes) {
-    refs.sizeEl.textContent = formatBytes(structure.bytes);
-    refs.sizeEl.classList.toggle('heavy', structure.bytes > HEAVY_BYTES);
-  }
-}
-function refreshStlEmpty() {
-  const anyVisible = [...featureObjects.values()].some((o) => o.visible);
-  stlEmpty.classList.toggle('hidden', anyVisible);
-  buildCaps(stl);   // keep cross-section caps in sync with which coats are shown
-}
-
-// ---------------------------------------------------------------------------
-//  Study selector (top bar) — pick & frame a sample
-// ---------------------------------------------------------------------------
-function focusSample(sampleId) {
-  const sample = findSample(sampleId);
-  if (sample) $('#study-label').textContent = `${sample.label.toUpperCase()} · µCT · SEG`;
-
-  const g = sampleGroups.get(sampleId);
-  if (g && g.children.length) {
-    const box = new THREE.Box3().setFromObject(g);
-    if (!box.isEmpty()) { fitBox(stl, box, 1.6); updateBounds(stl); }
-  }
-  // Reveal the sample in the left rail.
-  const el = layerTree.querySelector(`[data-sample-id="${sampleId}"]`);
-  el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
-function buildStudyMenu() {
-  const menu = $('#study-menu');
-  menu.innerHTML = '';
-  for (const sample of samplesData.samples) {
-    const n = sample.structures.length;
-    const item = document.createElement('button');
-    item.className = 'study-item'; item.setAttribute('role', 'menuitem');
-    item.innerHTML = `<span class="ms">${sample.demo ? 'content_copy' : 'folder_open'}</span>
-      <span class="study-item-name">${sample.label}</span>
-      <span class="study-item-meta mono">${n} layer${n === 1 ? '' : 's'}</span>`;
-    item.addEventListener('click', () => { focusSample(sample.id); closeStudyMenu(); });
-    menu.appendChild(item);
-  }
-}
-
-function openStudyMenu() {
-  const menu = $('#study-menu');
-  const r = $('#study-selector').getBoundingClientRect();
-  menu.style.left = `${r.left}px`;
-  menu.style.top = `${r.bottom + 6}px`;
-  menu.classList.add('open');
-}
-function closeStudyMenu() { $('#study-menu').classList.remove('open'); }
-
-// ---------------------------------------------------------------------------
-//  Toasts + confirm
-// ---------------------------------------------------------------------------
-function toast(message, type = 'info', ms = 6000) {
-  const el = document.createElement('div');
-  el.className = `toast toast-${type}`; el.textContent = message;
-  toastHost.appendChild(el);
-  requestAnimationFrame(() => el.classList.add('show'));
-  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, ms);
-}
-function askConfirm({ title, message, confirmLabel = 'OK' }) {
-  return new Promise((resolve) => {
-    const back = document.createElement('div');
-    back.className = 'modal-back';
-    back.innerHTML = `
-      <div class="modal" role="dialog" aria-modal="true">
-        <div class="modal-title">${title}</div>
-        <div class="modal-msg">${message}</div>
-        <div class="modal-actions">
-          <button class="btn btn-ghost" data-act="cancel">Cancel</button>
-          <button class="btn btn-primary" data-act="ok">${confirmLabel}</button>
-        </div>
-      </div>`;
-    document.body.appendChild(back);
-    const done = (v) => { back.remove(); resolve(v); };
-    back.addEventListener('click', (e) => {
-      if (e.target === back) done(false);
-      if (e.target.dataset.act === 'ok') done(true);
-      if (e.target.dataset.act === 'cancel') done(false);
-    });
-  });
-}
-
-// ---------------------------------------------------------------------------
-//  Sliders fill helper
-// ---------------------------------------------------------------------------
-function setFill(input) {
-  const min = Number(input.min || 0), max = Number(input.max || 100);
-  const pct = ((Number(input.value) - min) / (max - min)) * 100;
-  input.style.setProperty('--fill', `${pct}%`);
-}
-
-// ---------------------------------------------------------------------------
-//  Per-pane HUD
-// ---------------------------------------------------------------------------
-function addHUD(pane, paneEl) {
-  const frag = document.createDocumentFragment();
-  for (const c of ['tl', 'tr', 'bl', 'br']) {
-    const b = document.createElement('div'); b.className = `hud-bracket ${c}`; frag.appendChild(b);
-  }
-  const [t, i, l, r] = (paneEl.dataset.orient || 'S I R L').split(' ');
-  for (const [cls, txt] of [['t', t], ['b', i], ['l', l], ['r', r]]) {
-    const s = document.createElement('div'); s.className = `hud-orient ${cls}`; s.textContent = txt; frag.appendChild(s);
-  }
-  const bar = document.createElement('div');
-  bar.className = 'hud-toolbar';
-  bar.innerHTML = `
-    <button class="icon-btn" data-act="auto" title="Auto-rotate"><span class="ms">autorenew</span></button>
-    <button class="icon-btn" data-act="reset" title="Reset view"><span class="ms">restart_alt</span></button>
-    <button class="icon-btn" data-act="fit" title="Fit view"><span class="ms">center_focus_strong</span></button>`;
-  bar.querySelector('[data-act="auto"]').onclick = () => setAutoRotate(!autoRotate);
-  bar.querySelector('[data-act="reset"]').onclick = () => resetPane(pane);
-  bar.querySelector('[data-act="fit"]').onclick = () => resetPane(pane);
-  frag.appendChild(bar);
-  paneEl.appendChild(frag);
-}
-
-function setAutoRotate(on) {
-  autoRotate = on;
-  panes.forEach((p) => { p.controls.autoRotate = on; });
-  $('#auto-rotate').checked = on;
-  document.querySelectorAll('.hud-toolbar [data-act="auto"]').forEach((b) => b.setAttribute('aria-pressed', String(on)));
 }
 
 // ---------------------------------------------------------------------------
 //  Controls wiring
 // ---------------------------------------------------------------------------
 function wireControls() {
-  btnSync.addEventListener('click', () => setSync(!syncEnabled));
-  $('#btn-reset').addEventListener('click', resetAll);
-  $('#btn-fit').addEventListener('click', resetAll);
+  btnSync.addEventListener('click', () => wb.setSync(!wb.state().sync));
+  $('#btn-reset').addEventListener('click', () => wb.resetAll());
+  $('#btn-fit').addEventListener('click', () => wb.resetAll());
 
   // Study selector dropdown
   $('#study-selector').addEventListener('click', (e) => {
@@ -1519,10 +107,7 @@ function wireControls() {
     op.dispatchEvent(new Event('input', { bubbles: true }));
   });
 
-  $('#solid-fill').addEventListener('change', (e) => {
-    solidFill = e.target.checked;
-    reloadFillVariants();
-  });
+  $('#solid-fill').addEventListener('change', (e) => wb.setSolidFill(e.target.checked));
 
   $('#btn-clear-cache').addEventListener('click', async () => {
     const ok = await askConfirm({ title: 'Clear cache', message: 'Remove all locally cached meshes? They will re-download next time.', confirmLabel: 'Clear' });
@@ -1532,66 +117,49 @@ function wireControls() {
   // Render mode segmented control
   $('#render-mode').addEventListener('click', (e) => {
     const btn = e.target.closest('.seg-btn');
-    if (btn) setRenderMode(btn.dataset.mode);
+    if (btn) wb.setRenderMode(btn.dataset.mode);
   });
 
   // Layout (split / overlay) + anatomy group controls
-  $('#layout-seg').addEventListener('click', (e) => { const b = e.target.closest('.seg-btn'); if (b) setLayout(b.dataset.layout); });
-  $('#an-vis').addEventListener('change', (e) => { if (anatomyObject) anatomyObject.visible = e.target.checked; });
+  $('#layout-seg').addEventListener('click', (e) => { const b = e.target.closest('.seg-btn'); if (b) wb.setLayout(b.dataset.layout); });
+  $('#an-vis').addEventListener('change', (e) => wb.anatomy.setObjectVisible(e.target.checked));
   const modelBtn = $('#model-selector'), modelMenu = $('#model-menu');
   modelBtn?.addEventListener('click', (e) => { e.stopPropagation(); modelMenu.classList.toggle('open'); });
   document.addEventListener('click', (e) => {
     if (modelMenu?.classList.contains('open') && !modelMenu.contains(e.target)) modelMenu.classList.remove('open');
   });
   const anOp = $('#an-op'); setFill(anOp);
-  anOp.addEventListener('input', () => {
-    setFill(anOp);
-    anatomyOpacity = Number(anOp.value) / 100;
-    if (!anatomyObject) return;
-    // Scale every structure's own alpha rather than flattening them all to one
-    // value, so the model keeps its translucent-sclera / opaque-coats reading.
-    if (anatomyParts.size) applyAnatomyStyleAll();
-    else setObjectOpacity(anatomyObject, anatomyOpacity);
-  });
+  anOp.addEventListener('input', () => { setFill(anOp); wb.anatomy.setPaneOpacity(Number(anOp.value) / 100); });
   for (const [ax, id] of [['x', '#an-ox'], ['y', '#an-oy'], ['z', '#an-oz']]) {
     const sl = $(id); setFill(sl);
-    sl.addEventListener('input', () => { setFill(sl); anatomyOffset[ax] = Number(sl.value) / 100; if (layout === 'overlay') { normalizeGroupNode(anatomyGroup, anatomyOffset); updateBounds(stl); } });
+    sl.addEventListener('input', () => { setFill(sl); wb.anatomy.setOffset(ax, Number(sl.value) / 100); });
   }
 
   // Slice plane controls
   document.querySelectorAll('.slice-toggle input').forEach((cb) => {
-    cb.addEventListener('change', () => { clipState[cb.dataset.axis].on = cb.checked; panes.forEach(updateClips); });
+    cb.addEventListener('change', () => wb.setClipAxis(cb.dataset.axis, cb.checked));
   });
   document.querySelectorAll('.slice-row .slider').forEach((sl) => {
     setFill(sl);
     sl.addEventListener('input', () => {
       setFill(sl);
-      clipState[sl.dataset.axis].pos = Number(sl.value) / 100;
       $(`.slice-val[data-axis="${sl.dataset.axis}"]`).textContent = `${sl.value}%`;
-      panes.forEach(updateClips);
+      wb.setClipPos(sl.dataset.axis, Number(sl.value) / 100);
     });
   });
-  $('#slice-flip').addEventListener('change', (e) => { clipState.flip = e.target.checked; panes.forEach(updateClips); });
-  $('#slice-show').addEventListener('change', (e) => { clipState.showPlanes = e.target.checked; applyRenderModeAll(); });
+  $('#slice-flip').addEventListener('change', (e) => wb.setClipFlip(e.target.checked));
+  $('#slice-show').addEventListener('change', (e) => wb.setShowPlanes(e.target.checked));
 
   // Display controls
   const op = $('#global-opacity'); setFill(op);
   op.addEventListener('input', (e) => {
     setFill(e.target);
-    globalOpacity = Number(e.target.value) / 100;
     $('#opacity-val').textContent = `${e.target.value}%`;
-    for (const id of featureObjects.keys()) { const st = findStructure(id); if (st) reapplyOpacity(st); }
+    wb.setGlobalOpacity(Number(e.target.value) / 100);
   });
-  $('#auto-rotate').addEventListener('change', (e) => setAutoRotate(e.target.checked));
-  $('#show-grid').addEventListener('change', (e) => panes.forEach((p) => { p.grid.visible = e.target.checked && !p.bounds.isEmpty(); }));
-  $('#link-offsets').addEventListener('change', (e) => {
-    linkOffsets = e.target.checked;
-    if (linkOffsets) {   // snap every sample to the first sample's offset
-      const base = samplesData.samples[0]?.offset || { x: 0, y: 0, z: 0 };
-      for (const ax of ['x', 'y', 'z']) samplesData.samples.forEach((s) => setSampleOffset(s, ax, base[ax]));
-      updateBounds(stl);
-    }
-  });
+  $('#auto-rotate').addEventListener('change', (e) => wb.setAutoRotate(e.target.checked));
+  $('#show-grid').addEventListener('change', (e) => wb.setGrid(e.target.checked));
+  $('#link-offsets').addEventListener('change', (e) => wb.setLinkOffsets(e.target.checked));
 
   // Mobile left-rail drawer
   $('#rail-left-restore').addEventListener('click', () => document.body.classList.toggle('no-left'));
@@ -1600,12 +168,6 @@ function wireControls() {
     if (window.matchMedia('(max-width: 620px)').matches) document.body.classList.add('no-left');
   });
 }
-
-function findStructure(id) {
-  for (const s of samplesData.samples) { const f = s.structures.find((x) => x.id === id); if (f) return f; }
-  return null;
-}
-function findSample(id) { return samplesData.samples.find((s) => s.id === id) || null; }
 
 // ---------------------------------------------------------------------------
 //  Draggable divider
@@ -1629,60 +191,44 @@ function wireDivider() {
 }
 
 // ---------------------------------------------------------------------------
-//  Render loop + status bar
+//  Render loop
 // ---------------------------------------------------------------------------
-let lastStat = 0, frames = 0, fpsT = performance.now(), fps = 0;
-const statCam = $('#stat-cam'), statTris = $('#stat-tris'), statFps = $('#stat-fps');
-
+// The frame body (controls, headlight, render, fps / status stats) is
+// wb.tick; the app only owns the rAF loop and the clock.
 function animate(now) {
   requestAnimationFrame(animate);
-  glb.controls.update();
-  stl.controls.update();
-  if (glb.headLight) {
-    glb.headLight.position.copy(glb.camera.position);
-    glb.headLight.target.position.copy(glb.controls.target);
-    glb.headLight.target.updateMatrixWorld();
-  }
-  glb.renderer.render(glb.scene, glb.camera);
-  stl.renderer.render(stl.scene, stl.camera);
-
-  frames++;
-  if (now - fpsT >= 500) { fps = Math.round((frames * 1000) / (now - fpsT)); frames = 0; fpsT = now; }
-  if (now - lastStat >= 250) {
-    lastStat = now;
-    const az = Math.round(THREE.MathUtils.radToDeg(stl.controls.getAzimuthalAngle()));
-    const el = Math.round(90 - THREE.MathUtils.radToDeg(stl.controls.getPolarAngle()));
-    statCam.innerHTML = `az ${az}°&nbsp;&nbsp;el ${el}°`;
-    const tris = (glb.renderer.info.render.triangles + stl.renderer.info.render.triangles);
-    statTris.textContent = `${tris.toLocaleString()} triangles`;
-    statFps.textContent = `${fps} fps`;
-  }
+  wb.tick(now);
 }
 
 // ---------------------------------------------------------------------------
 //  Init
 // ---------------------------------------------------------------------------
 async function init() {
-  addHUD(glb, glbPane);
-  addHUD(stl, stlPane);
+  addHUD(wb, wb.panes.glb, glbPane);
+  addHUD(wb, wb.panes.stl, stlPane);
   wireControls();
+  wireViewEvents(wb, mounts);
+  layerPanel.wireEvents();
+  wireAnatomyUrl();
+  anatomyPanel.wireEvents();
   wireDivider();
-  setRenderMode('surface');
-  buildModelMenu();
-  buildAnatomyTree();
-  renderOverlay('idle');
-  refreshStlEmpty();
+  wb.setRenderMode('surface');
+  anatomyPanel.buildModelMenu();
+  anatomyPanel.buildTree();
+  anatomyPanel.renderOverlay('idle');
+  wb.layers.syncVisibility();
   requestAnimationFrame(animate);
 
   try {
     await loadCSVData();
-    buildLayerTree();
-    buildStudyMenu();
-    probeSizes(annotateSize);
+    wb.layers.setSamples(samplesData.samples);
+    layerPanel.build(samplesData.samples);
+    buildStudyMenu(wb, samplesData.samples);
+    probeSizes(layerPanel.annotateSize);
   } catch (err) {
     console.error(err);
     toast(`Failed to load dataset: ${err.message}`, 'error', 10000);
-    layerTree.innerHTML = `<div class="tree-error">Could not load the dataset manifest.<br>${err.message}</div>`;
+    layerPanel.showError(err.message);
   }
 }
 
