@@ -103,10 +103,10 @@ Storage API, so each mesh downloads at most once per browser. `tools/bench` meas
 symmetric point-to-surface distance, area-weighted over both meshes and normalised by the
 bounding-box diagonal:
 
-| Source mesh | Triangles | Size | Shipped | Size reduction | Mean error | p99 | Area change |
+| Mesh | Triangles | Source | Shipped | Reduction | Mean error | p99 | Area |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| `eye.stl` | 21,141,576 | 1008.1 MB | 633 KB | 1631× | 0.017% | 0.062% | +0.63% |
-| `feature.stl` | 3,131,220 | 149.3 MB | 325 KB | 471× | 0.006% | 0.024% | +0.21% |
+| eye | 21.1 M | 1008 MB | 633 KB | 1631× | 0.017% | 0.062% | +0.63% |
+| feature | 3.13 M | 149 MB | 325 KB | 471× | 0.006% | 0.024% | +0.21% |
 
 Discarding 98.5% of `eye.stl`'s triangles moves the surface by 0.017% of the diagonal on average;
 the worst-case (Hausdorff) distances, 3.99% and 1.10%, fall almost entirely in the
@@ -135,8 +135,7 @@ segmented meshes, the CSV manifest, the source reconstruction slices and the ful
 meshes the shipped assets were decimated from are published under MIT at
 <https://huggingface.co/datasets/kush1434/awg_retina_tomography_ui>, so a reader can recompute
 the reduction factors and error bounds above instead of taking them on trust: publishing the
-gigabyte a 633 KB derivative came from is what makes its accuracy claim falsifiable. `tools/bench` samples with a fixed seed so runs are reproducible, and rests on
-distance code cross-checked against brute force in the test suite.
+gigabyte a 633 KB derivative came from is what makes its accuracy claim falsifiable. `tools/bench` uses a fixed seed, so runs are reproducible.
 
 `optimized/anatomy/README.md` is a licence-and-geometry audit of nine entries from eight open
 eye-modelling projects: per-structure triangle counts, volumes and upstream DOIs for the three
@@ -153,8 +152,8 @@ by URL. CI runs both suites and decodes every shipped asset, so a corrupt mesh f
 # AI usage disclosure
 
 Generative AI was used in preparing this submission. The tools were Claude (Anthropic), accessed
-through Claude Code, in September 2026, using Claude Opus 5 (`claude-opus-5`) and Claude Fable 5.1
-(`claude-fable-5-1`).
+through Claude Code, in September and October 2026, using Claude Opus 5 (`claude-opus-5`), Claude
+Fable 5.1 (`claude-fable-5-1`) and Claude Opus 5.5 (`claude-opus-5-5`).
 
 - *The application.* The viewer as it existed before this submission — `viewer.js`, the two
   loaders, the optimisation pipeline and the anatomy-model build scripts, developed between
