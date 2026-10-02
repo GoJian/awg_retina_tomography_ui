@@ -75,6 +75,10 @@ walk the deployed app through this by hand:
 6. Repeat 1–5 once in Firefox and once in Safari.
 7. Narrow the window below 620px and confirm the left rail becomes the overlay
    drawer and both panes stay usable.
+8. Drag a `.glb` from `local/F10/` onto the right pane and confirm the drop
+   overlay appears while it hovers, and the mesh renders as an `Imported`
+   sample once dropped. The browser suite covers the file input, not the drag
+   itself.
 
 ## Style
 
@@ -95,8 +99,10 @@ restate the code.
 ## Working with the data
 
 The application reads a CSV manifest, so most data changes need no code. Point
-the viewer at an alternative manifest with `?dataset=<url>`; the columns are
-documented in [The manifest format](README.md#the-manifest-format). The
+the viewer at an alternative manifest with `?dataset=<url>` or the Import
+dialog's URL field, or drop meshes (with or without a manifest) straight onto
+the views — see [Loading your own data](README.md#loading-your-own-data); the
+columns are documented in [The manifest format](README.md#the-manifest-format). The
 full-resolution source scans live in the
 [Hugging Face dataset](https://huggingface.co/datasets/kush1434/awg_retina_tomography_ui)
 and are never modified by this repository.

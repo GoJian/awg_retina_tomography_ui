@@ -1,5 +1,5 @@
 // ============================================================================
-//  viewer.js — Retina Tomography Workbench
+//  viewer.js — OcuLayer, the retina tomography workbench
 //  Two linked Three.js scenes (eye-anatomy GLB | segmented layers) wrapped in a
 //  clinical instrument-panel UI: synced orbit, render modes (surface / wireframe
 //  / tri-planar slices via clipping planes), on-demand loading, caching & HUD.
@@ -10,12 +10,14 @@
 //  controls into workbench calls and runs the frame loop.
 // ============================================================================
 
-import { loadCSVData, probeSizes, samplesData } from './data-loader.js';
+import { loadCSVData, probeSizes, samplesData, samplesFromFiles } from './data-loader.js';
 import { fetchBuffer, isCached, clearCache } from './asset-loader.js';
+import { createLocalIo } from './app/local-files.js';
 import { browserAdapters, mountPane } from './app/browser-adapters.js';
-import { setFill, toast, askConfirm, addHUD, wireViewEvents, buildStudyMenu, openStudyMenu, closeStudyMenu } from './app/ui/chrome.js';
+import { setFill, toast, askConfirm, addHUD, wireViewEvents, buildStudyMenu, openStudyMenu, closeStudyMenu, focusSample } from './app/ui/chrome.js';
 import { createLayerPanel } from './app/ui/layer-panel.js';
 import { createAnatomyPanel } from './app/ui/anatomy-panel.js';
+import { createImportPanel } from './app/ui/import-panel.js';
 import { createWorkbench } from './core/index.js';
 
 // ---------------------------------------------------------------------------
@@ -41,7 +43,11 @@ const btnSync = $('#btn-sync');
 // `?anatomy=<url>` still overrides the file outright, for a model that isn't
 // in the registry. Both are read once, here.
 const params = new URLSearchParams(location.search);
-const io = { fetchBuffer, isCached };
+// The network io, wrapped so meshes the user imports from disk are served
+// from memory under their `local:` paths and everything else streams and
+// caches as before.
+const local = createLocalIo({ fetchBuffer, isCached });
+const io = local.io;
 const wb = createWorkbench({
   adapters: { glb: browserAdapters(glbPane), stl: browserAdapters(stlPane) },
   io,
@@ -56,6 +62,59 @@ const mounts = { glb: mountPane(wb.panes.glb, glbPane), stl: mountPane(wb.panes.
 // mesh is recognised the same way on both sides.
 const layerPanel = createLayerPanel(wb, io);
 const anatomyPanel = createAnatomyPanel(wb, io);
+const importPanel = createImportPanel({ onFiles: importFiles, onManifestUrl: loadManifest });
+
+// ---------------------------------------------------------------------------
+//  Datasets: the manifest at start, a manifest URL, or the user's own files
+// ---------------------------------------------------------------------------
+// Whatever the source, samples reach the viewer the same way: the controller
+// adopts the records, the rail and the study menu are rebuilt over them, and
+// each structure's size is probed in the background.
+function showSamples(samples) {
+  wb.layers.setSamples(samples);
+  layerPanel.build(samples);
+  buildStudyMenu(wb, samples);
+  probeSizes(layerPanel.annotateSize);
+}
+
+// Files picked or dropped: appended as a new sample beside what is shown,
+// every layer switched on at once (they are local, so there is nothing to
+// download), and the view framed on it.
+async function importFiles(files) {
+  try {
+    const { samples, files: localFiles, skipped } = await samplesFromFiles(files, { existing: samplesData.samples });
+    local.add(localFiles);
+    samplesData.samples.push(...samples);
+    showSamples(samplesData.samples);
+    const n = samples.reduce((k, s) => k + s.structures.length, 0);
+    for (const s of samples) for (const st of s.structures) layerPanel.activate(st.id);
+    focusSample(wb, samples[0].id);
+    const note = skipped.length ? ` Skipped ${skipped.length}: ${skipped.slice(0, 3).join(', ')}${skipped.length > 3 ? '…' : ''}.` : '';
+    toast(`Imported ${n} layer${n === 1 ? '' : 's'} from ${files.length} file${files.length === 1 ? '' : 's'}.${note}`, skipped.length ? 'error' : 'info');
+  } catch (err) {
+    console.error(err);
+    toast(`Import failed: ${err.message}`, 'error', 8000);
+  }
+}
+
+// A manifest URL replaces the dataset outright, and lands in the address bar
+// as ?dataset= so the resulting view can be shared as a link.
+async function loadManifest(url) {
+  try {
+    wb.layers.clear();
+    await loadCSVData(url);
+    const here = new URL(location.href);
+    here.searchParams.set('dataset', url);
+    history.replaceState(null, '', here);
+    showSamples(samplesData.samples);
+    const n = samplesData.samples.reduce((k, s) => k + s.structures.length, 0);
+    toast(`Loaded ${n} layer${n === 1 ? '' : 's'} from the manifest.`, 'info');
+  } catch (err) {
+    console.error(err);
+    toast(`Failed to load dataset: ${err.message}`, 'error', 10000);
+    layerPanel.showError(err.message);
+  }
+}
 
 // ---------------------------------------------------------------------------
 //  URL ↔ anatomy model
@@ -211,6 +270,7 @@ async function init() {
   layerPanel.wireEvents();
   wireAnatomyUrl();
   anatomyPanel.wireEvents();
+  importPanel.wire();
   wireDivider();
   wb.setRenderMode('surface');
   anatomyPanel.buildModelMenu();
@@ -221,10 +281,7 @@ async function init() {
 
   try {
     await loadCSVData();
-    wb.layers.setSamples(samplesData.samples);
-    layerPanel.build(samplesData.samples);
-    buildStudyMenu(wb, samplesData.samples);
-    probeSizes(layerPanel.annotateSize);
+    showSamples(samplesData.samples);
   } catch (err) {
     console.error(err);
     toast(`Failed to load dataset: ${err.message}`, 'error', 10000);

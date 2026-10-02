@@ -124,6 +124,9 @@ body.synced:not(.overlay-layout) #sync-badge { display: inline-flex; opacity: 1;
 .pill:hover { background: rgba(255,255,255,.05); }
 .pill .ms { font-size: 16px; }
 .pill .mono { font-size: 11px; color: var(--mono-v); letter-spacing: .03em; }
+.pill-accent { border-color: color-mix(in oklab, var(--ac) 45%, transparent); color: var(--ac); }
+.pill-accent .mono { color: var(--ac); }
+.pill-accent:hover { background: color-mix(in oklab, var(--ac) 12%, transparent); }
 
 /* Study selector dropdown */
 #study-menu {
@@ -268,10 +271,9 @@ body.synced:not(.overlay-layout) #sync-badge { display: inline-flex; opacity: 1;
   padding: 8px 9px; border-radius: 7px; border: 0; background: transparent; cursor: pointer;
   font-family: inherit; color: var(--t-body);
 }
-.model-item:hover:not(:disabled) { background: rgba(255,255,255,.055); }
+.model-item:hover { background: rgba(255,255,255,.055); }
 .model-item.active { background: color-mix(in oklab, var(--ac) 13%, transparent); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ac) 30%, transparent); }
 .model-item.active .model-name { color: var(--ac); }
-.model-item:disabled { cursor: not-allowed; opacity: .42; }
 .model-name { font-size: 12.5px; }
 .model-sub { grid-column: 1 / -1; font-size: 10px; color: var(--t-muted); line-height: 1.35; }
 .model-lic { font-size: 9px; color: var(--t-muted); align-self: center; }
@@ -439,8 +441,8 @@ body.no-left .edge-restore.left { display: inline-flex; }
 .modal-msg { font-size: 13px; color: var(--t-2); line-height: 1.5; margin-bottom: 18px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 
-#help-dialog, #about-dialog { border: 1px solid var(--line-strong); border-radius: 14px; padding: 0; background: var(--rail); color: var(--t-body); max-width: 540px; width: 92vw; max-height: 88vh; box-shadow: 0 10px 40px -14px rgba(0,0,0,.85); }
-#help-dialog::backdrop, #about-dialog::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
+#help-dialog, #about-dialog, #import-dialog { border: 1px solid var(--line-strong); border-radius: 14px; padding: 0; background: var(--rail); color: var(--t-body); max-width: 540px; width: 92vw; max-height: 88vh; box-shadow: 0 10px 40px -14px rgba(0,0,0,.85); }
+#help-dialog::backdrop, #about-dialog::backdrop, #import-dialog::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
 .dialog-card { position: relative; padding: 26px 28px; }
 .dialog-close { position: absolute; top: 14px; right: 14px; }
 .dialog-card h2 { margin: 0 0 12px; font-size: 18px; color: var(--t-primary); }
@@ -455,6 +457,33 @@ body.no-left .edge-restore.left { display: inline-flex; }
 .cite { font-size: 12px; color: var(--t-2); padding-left: 11px; border-left: 2px solid var(--line-strong); line-height: 1.65; }
 .dialog-foot { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* ----------------------------- Import dialog + drop targets ------------- */
+.drop-zone {
+  display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center;
+  padding: 22px 18px; border-radius: 11px; border: 1.5px dashed var(--line-strong);
+  background: var(--inset-2); color: var(--t-2); transition: border-color .15s, background .15s;
+}
+.drop-zone.over { border-color: var(--ac); background: color-mix(in oklab, var(--ac) 10%, transparent); }
+.drop-zone .drop-icon { font-size: 30px; color: var(--ac); }
+.drop-zone .drop-text { font-size: 12.5px; line-height: 1.55; max-width: 380px; }
+.drop-zone .btn .ms { font-size: 16px; }
+.url-row { display: flex; gap: 8px; align-items: stretch; }
+.text-field {
+  flex: 1; min-width: 0; height: 32px; padding: 0 10px; border-radius: 7px; font-size: 12px;
+  background: var(--inset-2); border: 1px solid var(--line-strong); color: var(--t-body); outline: none;
+}
+.text-field:focus { border-color: var(--ac); box-shadow: 0 0 0 1px color-mix(in oklab, var(--ac) 35%, transparent); }
+.text-field::placeholder { color: var(--t-muted); }
+.dialog-note { margin-top: 10px; font-size: 11.5px; color: var(--t-muted); }
+.dialog-card code { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: var(--t-2); background: rgba(255,255,255,.06); padding: 1px 4px; border-radius: 4px; }
+
+/* Whole-viewport drop overlay: shown while files hover, never catches the pointer. */
+#drop-hint { position: absolute; inset: 0; z-index: 40; display: none; align-items: center; justify-content: center; pointer-events: none; background: color-mix(in oklab, var(--ac) 9%, rgba(6,10,14,.55)); backdrop-filter: blur(2px); }
+body.dropping #drop-hint { display: flex; }
+.drop-hint-card { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-radius: 12px; border: 1.5px dashed var(--ac); background: rgba(10,13,18,.85); color: var(--ac); font-size: 13.5px; font-weight: 600; }
+.drop-hint-card .ms { font-size: 22px; }
+.sample.is-imported > .sample-head-row .sample-name::after { content: 'LOCAL'; margin-left: 7px; font-size: 8.5px; letter-spacing: .12em; color: var(--ac); vertical-align: 1px; }
 
 /* ----------------------------- Scrollbars -------------------------------- */
 .rail::-webkit-scrollbar, #layer-tree::-webkit-scrollbar { width: 9px; }
@@ -474,6 +503,7 @@ body.no-left .edge-restore.left { display: inline-flex; }
   #divider { flex-basis: 5px; height: 5px; cursor: row-resize; align-self: auto; }
   .brand-eyebrow { display: none; }
   #study-selector, .live-status { display: none; }
+  #btn-import .mono { display: none; }   /* icon only */
 }
 @media (max-width: 620px) {
   /* Left rail becomes a fixed overlay drawer; viewport fills the single track. */

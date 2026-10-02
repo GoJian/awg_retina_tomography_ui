@@ -1,5 +1,6 @@
 // ============================================================================
-//  Tests for data-loader.js — manifest parsing, optimized-asset resolution and
+//  Tests for data-loader.js — manifest parsing (from a URL and from text),
+//  building samples from the user's own files, optimized-asset resolution and
 //  the Hugging Face cold-request retry.
 // ============================================================================
 
@@ -356,5 +357,148 @@ describe('probeSizes', () => {
     const data = await loadCSVData(MANIFEST_URL);
     await probeSizes(() => {});
     assert.ok(data.samples.flatMap((s) => s.structures).every((s) => s._resolved));
+  });
+});
+
+// ---------------------------------------------------------------------------
+//  parseManifest — the pure parser under loadCSVData and the file import
+// ---------------------------------------------------------------------------
+describe('parseManifest', () => {
+  test('parses text into the same records loadCSVData produces, without touching samplesData', async () => {
+    const { parseManifest, samplesData } = await importFresh('data-loader.js');
+    const samples = parseManifest(CSV);
+    assert.equal(samples.length, 2);
+    assert.equal(samples[0].id, 'f10_mouse_eye');
+    assert.deepEqual(samples[0].structures.map((s) => s.id), ['f10_mouse_eye__retina.glb', 'f10_mouse_eye__sclera.glb']);
+    assert.equal(samples[1].structures[0].kind, 'stl');
+    assert.deepEqual(samplesData.samples, [], 'the shared model is not written');
+  });
+
+  test('rejects a header-only manifest with the same error as loadCSVData', async () => {
+    const { parseManifest } = await importFresh('data-loader.js');
+    assert.throws(() => parseManifest(HEADER), /empty/i);
+    assert.throws(() => parseManifest(''), /empty/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+//  File-name helpers
+// ---------------------------------------------------------------------------
+describe('isMeshFile / baseName / labelFromFileName', () => {
+  test('isMeshFile accepts the three renderable extensions, any case, with or without a query', async () => {
+    const { isMeshFile, MESH_EXTENSIONS } = await importFresh('data-loader.js');
+    assert.deepEqual(MESH_EXTENSIONS, ['.glb', '.gltf', '.stl']);
+    for (const n of ['a.glb', 'A.GLB', 'dir/b.gltf', 'c.stl?download=1']) assert.equal(isMeshFile(n), true, n);
+    for (const n of ['manifest.csv', 'notes.txt', 'mesh.obj', 'glb', '', undefined]) assert.equal(isMeshFile(n), false, String(n));
+  });
+
+  test('baseName strips directories, both slashes, and the query', async () => {
+    const { baseName } = await importFresh('data-loader.js');
+    assert.equal(baseName('https://h/resolve/main/F10_layers/retina.glb?download=true'), 'retina.glb');
+    assert.equal(baseName('C:\\scans\\eye.stl'), 'eye.stl');
+    assert.equal(baseName('retina.glb'), 'retina.glb');
+  });
+
+  test('labelFromFileName makes a readable label from a file name', async () => {
+    const { labelFromFileName } = await importFresh('data-loader.js');
+    assert.equal(labelFromFileName('retina.glb'), 'Retina');
+    assert.equal(labelFromFileName('scans/retina_inner-v2.glb'), 'Retina inner v2');
+    assert.equal(labelFromFileName('RPE.stl'), 'RPE');
+    assert.equal(labelFromFileName('optic.nerve.head.gltf'), 'Optic nerve head');
+  });
+});
+
+// ---------------------------------------------------------------------------
+//  samplesFromFiles — the user's own data
+// ---------------------------------------------------------------------------
+const file = (name, size = 10, text = '') => ({ name, size, async text() { return text; } });
+
+describe('samplesFromFiles', () => {
+  test('meshes alone become one "Imported" sample, one local, pre-resolved structure per file', async () => {
+    const { samplesFromFiles } = await importFresh('data-loader.js');
+    const retina = file('retina.glb', 1234), sclera = file('outer_sclera.stl', 99);
+    const { samples, files, skipped } = await samplesFromFiles([retina, sclera, file('readme.txt')]);
+
+    assert.equal(samples.length, 1);
+    const [s] = samples;
+    assert.equal(s.id, 'imported');
+    assert.equal(s.label, 'Imported');
+    assert.equal(s.imported, true);
+    assert.deepEqual(s.offset, { x: 0, y: 0, z: 0 });
+    assert.equal(s.opacity, 1);
+    assert.deepEqual(s.structures.map((st) => [st.id, st.label, st.path, st.kind, st.bytes, st.local, st._resolved, st.sampleId]), [
+      ['imported__retina.glb', 'Retina', 'local:retina.glb', 'gltf', 1234, true, true, 'imported'],
+      ['imported__outer_sclera.stl', 'Outer sclera', 'local:outer_sclera.stl', 'stl', 99, true, true, 'imported'],
+    ]);
+    assert.notEqual(s.structures[0].color, s.structures[1].color);
+    assert.equal(s.structures[0].opacity, 1);
+    assert.deepEqual([...files.entries()], [['local:retina.glb', retina], ['local:outer_sclera.stl', sclera]]);
+    assert.deepEqual(skipped, ['readme.txt']);
+  });
+
+  test('a second import gets a distinct id and label, avoiding whatever is already shown', async () => {
+    const { samplesFromFiles } = await importFresh('data-loader.js');
+    const first = (await samplesFromFiles([file('a.glb')])).samples;
+    const existing = [{ id: 'f10_mouse_eye' }, ...first];
+    const second = (await samplesFromFiles([file('a.glb')], { existing })).samples;
+    assert.equal(second[0].id, 'imported_2');
+    assert.equal(second[0].label, 'Imported 2');
+    assert.equal(second[0].structures[0].id, 'imported_2__a.glb');
+    // Even when an unrelated sample already holds the slug, the id stays unique.
+    const clash = (await samplesFromFiles([file('a.glb')], { existing: [{ id: 'imported' }] })).samples;
+    assert.equal(clash[0].id, 'imported_2');
+  });
+
+  test('a manifest plus its meshes: rows matched to files by base name, remote links kept, the rest skipped', async () => {
+    const { samplesFromFiles } = await importFresh('data-loader.js');
+    const csv = [
+      HEADER,
+      'My eye,https://example.test/src,retina.glb,Retina,/somewhere/on/disk/Retina.GLB,',
+      'My eye,,sclera.stl,,sclera.stl,',
+      'My eye,,choroid.glb,Choroid,https://cdn.test/choroid.glb,',
+      'My eye,,vitreous.glb,Vitreous,vitreous.glb,',
+    ].join('\n');
+    const retina = file('retina.glb', 500), sclera = file('sclera.stl', 700), extra = file('unreferenced.glb');
+    const { samples, files, skipped } = await samplesFromFiles([file('layers.csv', 1, csv), retina, sclera, extra]);
+
+    assert.equal(samples.length, 1);
+    const [s] = samples;
+    assert.equal(s.id, 'my_eye');
+    assert.equal(s.label, 'My eye');
+    assert.equal(s.link, 'https://example.test/src');
+    assert.equal(s.imported, true);
+    assert.deepEqual(s.structures.map((st) => [st.id, st.label, st.path, st.kind, st.local === true]), [
+      ['my_eye__retina.glb', 'Retina', 'local:retina.glb', 'gltf', true],
+      ['my_eye__sclera.stl', 'sclera.stl', 'local:sclera.stl', 'stl', true],
+      ['my_eye__choroid.glb', 'Choroid', 'https://cdn.test/choroid.glb', 'gltf', false],
+    ]);
+    assert.equal(s.structures[0].bytes, 500);
+    assert.equal(s.structures[2]._resolved, undefined, 'a remote mesh is still probed later');
+    assert.deepEqual([...files.keys()], ['local:retina.glb', 'local:sclera.stl'], 'unreferenced files are not registered');
+    assert.deepEqual(skipped, ['vitreous.glb']);
+  });
+
+  test('a manifest whose samples clash with existing ids is renamed consistently', async () => {
+    const { samplesFromFiles } = await importFresh('data-loader.js');
+    const csv = [HEADER, 'F10 mouse eye,,retina.glb,Retina,retina.glb,'].join('\n');
+    const { samples } = await samplesFromFiles([file('m.csv', 1, csv), file('retina.glb')], { existing: [{ id: 'f10_mouse_eye' }] });
+    assert.equal(samples[0].id, 'f10_mouse_eye_2');
+    assert.equal(samples[0].structures[0].id, 'f10_mouse_eye_2__retina.glb');
+    assert.equal(samples[0].structures[0].sampleId, 'f10_mouse_eye_2');
+  });
+
+  test('rejects when nothing usable was supplied, or when a manifest names no reachable mesh', async () => {
+    const { samplesFromFiles } = await importFresh('data-loader.js');
+    await assert.rejects(() => samplesFromFiles([]), /No mesh files/);
+    await assert.rejects(() => samplesFromFiles([file('notes.txt')]), /No mesh files/);
+    const csv = [HEADER, 'S,,a.glb,A,a.glb,'].join('\n');
+    await assert.rejects(() => samplesFromFiles([file('m.csv', 1, csv)]), /names no mesh/);
+  });
+
+  test('a manifest is recognised by its extension whatever the case, and text() is what is parsed', async () => {
+    const { samplesFromFiles } = await importFresh('data-loader.js');
+    const csv = [HEADER, 'S,,a.glb,A,a.glb,'].join('\n');
+    const { samples } = await samplesFromFiles([file('MANIFEST.CSV', 1, csv), file('A.glb', 3)]);
+    assert.equal(samples[0].structures[0].path, 'local:A.glb', 'matched case-insensitively, path keeps the file\'s own name');
   });
 });

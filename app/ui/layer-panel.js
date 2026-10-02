@@ -24,7 +24,7 @@ const $ = (s) => document.querySelector(s);
 export function createLayerPanel(wb, io) {
   const layerTree = $('#layer-tree');
   const stlEmpty = $('#stl-empty');
-  const rowRefs = new Map();          // structureId -> { row, bar, status, progress, checkbox, sizeEl }
+  const rowRefs = new Map();          // structureId -> { row, bar, status, progress, checkbox, sizeEl, structure }
   const sampleCtlRefs = new Map();    // sampleId -> { ox, oy, oz } offset slider inputs
 
   // -------------------------------------------------------------------------
@@ -35,8 +35,8 @@ export function createLayerPanel(wb, io) {
       const refs = rowRefs.get(id);
       if (!refs) return;
       const label = state === 'loading'
-        ? { start: 'Downloading… 0%', cache: 'Loading from cache…', build: 'Building mesh…' }[phase]
-        : state === 'loaded' ? (cached ? 'Loaded · cached' : 'Loaded')
+        ? { start: refs.structure.local ? 'Reading file…' : 'Downloading… 0%', cache: 'Loading from cache…', build: 'Building mesh…' }[phase]
+        : state === 'loaded' ? (refs.structure.local ? 'Loaded · local file' : cached ? 'Loaded · cached' : 'Loaded')
           : state === 'error' ? 'Failed to load' : '';
       setRowState(refs, state, label);
       if (state === 'loading' && phase === 'build') refs.bar.style.width = '100%';
@@ -81,6 +81,7 @@ export function createLayerPanel(wb, io) {
       group.className = 'sample';
       group.dataset.sampleId = sample.id;
       if (sample.demo) group.classList.add('is-demo');
+      if (sample.imported) group.classList.add('is-imported');
 
       const headRow = document.createElement('div');
       headRow.className = 'sample-head-row';
@@ -126,6 +127,7 @@ export function createLayerPanel(wb, io) {
     wrap.className = 'sample-ctl'; wrap.hidden = true;
     wrap.innerHTML = `
       ${sample.demo ? '<div class="demo-badge">synthetic demo copy</div>' : ''}
+      ${sample.imported ? '<div class="demo-badge">imported · read from your files</div>' : ''}
       <div class="ctl-line"><span>Opacity</span><input type="range" class="slider s-op" min="0" max="100" value="${Math.round(sample.opacity * 100)}"></div>
       <div class="ctl-line"><span>Offset X</span><input type="range" class="slider s-ox" min="-100" max="100" value="${sample.offset.x * 100}"></div>
       <div class="ctl-line"><span>Offset Y</span><input type="range" class="slider s-oy" min="-100" max="100" value="${sample.offset.y * 100}"></div>
@@ -178,7 +180,7 @@ export function createLayerPanel(wb, io) {
     top.append(checkbox, swatch, colorInput, label, opacity);
     row.append(top, progress, status);
 
-    const refs = { row, bar, status, progress, checkbox, sizeEl: label.querySelector('.layer-size') };
+    const refs = { row, bar, status, progress, checkbox, sizeEl: label.querySelector('.layer-size'), structure };
     rowRefs.set(structure.id, refs);
 
     swatch.addEventListener('click', () => colorInput.click());
@@ -191,26 +193,43 @@ export function createLayerPanel(wb, io) {
       wb.layers.setOpacity(structure, Number(e.target.value) / 100);
     });
 
-    checkbox.addEventListener('change', async () => {
-      if (checkbox.checked) {
-        if (wb.layers.has(structure.id)) { wb.layers.setVisible(structure.id, true); return; }
-        if (!structure._resolved) {
-          setRowState(rowRefs.get(structure.id), 'loading', 'Checking…');
-          await resolveStructure(structure);
-          annotateSize(structure);
-          if (!checkbox.checked) { setRowState(rowRefs.get(structure.id), 'idle', ''); return; }
-        }
-        if (wb.layers.isHeavy(structure) && !(await io.isCached(structure.path))) {
-          const ok = await askConfirm({ title: 'Large layer', message: `“${structure.label}” is ${formatBytes(structure.bytes)}. It will download once and then be cached. Continue?`, confirmLabel: 'Download' });
-          if (!ok) { checkbox.checked = false; return; }
-        }
-        wb.layers.load(structure);
-      } else {
-        wb.layers.abort(structure.id);
-        wb.layers.setVisible(structure.id, false);
-      }
-    });
+    checkbox.addEventListener('change', () => toggle(structure, checkbox));
     return row;
+  }
+
+  // The row's checkbox path: show (or resolve, confirm and load) on check,
+  // abort-and-hide on uncheck. Shared by the change handler and activate().
+  async function toggle(structure, checkbox) {
+    if (checkbox.checked) {
+      if (wb.layers.has(structure.id)) { wb.layers.setVisible(structure.id, true); return; }
+      if (!structure._resolved) {
+        setRowState(rowRefs.get(structure.id), 'loading', 'Checking…');
+        await resolveStructure(structure);
+        annotateSize(structure);
+        if (!checkbox.checked) { setRowState(rowRefs.get(structure.id), 'idle', ''); return; }
+      }
+      if (wb.layers.isHeavy(structure) && !(await io.isCached(structure.path))) {
+        const ok = await askConfirm({ title: 'Large layer', message: `“${structure.label}” is ${formatBytes(structure.bytes)}. It will download once and then be cached. Continue?`, confirmLabel: 'Download' });
+        if (!ok) { checkbox.checked = false; return; }
+      }
+      wb.layers.load(structure);
+    } else {
+      wb.layers.abort(structure.id);
+      wb.layers.setVisible(structure.id, false);
+    }
+  }
+
+  /**
+   * Tick a row programmatically and run its load path, exactly as a click
+   * would. A no-op for an unknown id or a row that is already checked.
+   * @param {string} id structure id
+   * @returns {Promise<void>|undefined}
+   */
+  function activate(id) {
+    const refs = rowRefs.get(id);
+    if (!refs || refs.checkbox.checked) return undefined;
+    refs.checkbox.checked = true;
+    return toggle(refs.structure, refs.checkbox);
   }
 
   function annotateSize(structure) {
@@ -226,5 +245,5 @@ export function createLayerPanel(wb, io) {
     layerTree.innerHTML = `<div class="tree-error">Could not load the dataset manifest.<br>${message}</div>`;
   }
 
-  return { wireEvents, build, annotateSize, showError };
+  return { wireEvents, build, annotateSize, showError, activate };
 }

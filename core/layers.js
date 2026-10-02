@@ -69,6 +69,23 @@ export class LayerController {
   // -------------------------------------------------------------------------
   setSamples(samples) { this.samples = samples; }
 
+  // Drop every loaded layer and sample group: the dataset is being replaced.
+  // In-flight downloads are cancelled first (each ends in its one idle), the
+  // objects are disposed, and the pane is left empty and unfitted so the next
+  // load frames afresh. Emits one layers:visible for the now-empty pane.
+  clear() {
+    this.abortAll();
+    clearCaps(this.pane);
+    for (const obj of this.featureObjects.values()) { obj.parent?.remove(obj); disposeObject(obj); }
+    this.featureObjects.clear();
+    for (const g of this.sampleGroups.values()) this.pane.root.remove(g);
+    this.sampleGroups.clear();
+    this.stlFitted = false;
+    this.samples = [];
+    updateBounds(this.pane, this.view);
+    this.syncVisibility();
+  }
+
   findStructure(id) {
     for (const s of this.samples) { const f = s.structures.find((x) => x.id === id); if (f) return f; }
     return null;
@@ -241,6 +258,9 @@ export class LayerController {
       this.emitter.emit('layer:state', { id, state: 'loading', phase: 'build' });
 
       const object = structure.kind === 'gltf' ? await this.parsers.parseGLTF(buffer) : this.parsers.parseSTL(buffer, structure);
+      // An abort that lands while the mesh was being parsed (or a clear() that
+      // did) must not place the object into a scene that has moved on.
+      if (controller.signal.aborted) { disposeObject(object); throw abortError(); }
       object.userData.id = id;
       this.featureObjects.set(id, object);
       const isNewGroup = !this.sampleGroups.has(structure.sampleId);
@@ -270,4 +290,10 @@ export class LayerController {
   // Cancel one download; the row returns to idle through load()'s catch.
   abort(id) { this.inFlight.get(id)?.abort(); }
   abortAll() { for (const c of this.inFlight.values()) c.abort(); }
+}
+
+function abortError() {
+  const err = new Error('The operation was aborted.');
+  err.name = 'AbortError';
+  return err;
 }

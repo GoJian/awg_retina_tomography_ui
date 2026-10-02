@@ -1,9 +1,11 @@
-# Retina Tomography Viewer
+# OcuLayer — Retina Tomography Viewer
 
-An interactive **3D web viewer** for GeneLab AWG retina micro-tomography. It shows
-two linked views side by side — a reference **eye anatomy** model on the left and
-the individually toggleable **segmented tissue layers** on the right — built with
-[Three.js](https://threejs.org/) and a zero-build static front end.
+**OcuLayer** is a zero-install **3D web viewer** for segmented ocular
+micro-tomography, built for GeneLab AWG retina micro-CT. It shows two linked
+views side by side — a reference **eye anatomy** model on the left and the
+individually toggleable **segmented tissue layers** on the right — and loads
+[your own meshes or manifest](#loading-your-own-data) with a drag and drop.
+Built with [Three.js](https://threejs.org/) and a zero-build static front end.
 
 **Try it:** <https://kush1434.github.io/awg_retina_tomography_ui/> — nothing to
 install. That deployment serves the `v1.0.0` build this README documents,
@@ -57,6 +59,12 @@ quantifies exactly how much accuracy that costs.
   `µCT`, so the two panes can be read against each other.
 - **On-demand layers** — each segmented structure loads only when toggled, with a
   real progress bar, a cancel control, and recolour / opacity sliders.
+- **Bring your own data** — the **Import** button, or dropping files anywhere on
+  the views, adds your own `.glb` / `.gltf` / `.stl` meshes (or a CSV manifest
+  with its meshes) as a new sample beside the bundled one, read in the browser
+  and never uploaded; a manifest that is already online loads from its URL, in
+  the same dialog or as `?dataset=`. See
+  [Loading your own data](#loading-your-own-data).
 - **Fast by default** — heavy source scans (≈1 GB STL meshes) are decimated and
   Draco-compressed to a few hundred KB each and shipped with the app, so a first
   visit downloads about 405 KB of first-party payload over the wire — 534 KB
@@ -73,6 +81,41 @@ quantifies exactly how much accuracy that costs.
   download once and load instantly afterwards.
 - **Responsive** — a draggable divider on desktop; a collapsible drawer and
   stacked views on mobile.
+
+---
+
+## Loading your own data
+
+Three routes, all ending in the same layer rail, the same controls and the same
+reference eye on the left. Nothing you import leaves your browser.
+
+**1. Files from your computer (no manifest needed).** Click **Import** in the
+top bar and choose files, or drop them anywhere on the two views. Any mix of
+`.glb`, `.gltf` and binary `.stl` files becomes one new sample, labelled
+`Imported`, with one layer per file named from its file name (`retina_inner.glb`
+→ "Retina inner"). Every layer switches on at once — there is nothing to
+download — and the view frames the new sample. Import again and a second sample
+(`Imported 2`) appears beside the first, so two segmentations can be overlaid
+with the per-sample offset and opacity controls. Files are read in memory and
+are gone on reload; the layer rail badges them `LOCAL`.
+
+**2. A manifest file with its meshes.** Drop or choose a CSV manifest (the
+[format below](#the-manifest-format)) together with the meshes it names. Rows
+are matched to files by file name, so `seg_mesh_link` can be a bare file name;
+a row whose link is an `http(s)` URL is fetched as usual, and a row that names a
+file you did not supply is skipped and reported. This is how a segmentation
+with proper sample names, labels and notes is brought in without hosting it.
+
+**3. A manifest URL.** Paste the URL of a hosted CSV into the **From a URL**
+field of the same dialog, or open the viewer with `?dataset=<url>`. The dialog
+writes the URL into the address bar as `?dataset=`, so the resulting view can be
+shared as a link — the one route that survives a reload. The meshes the manifest
+links must be served with CORS enabled (Hugging Face datasets and GitHub Pages
+both are).
+
+`local/F10/F10_layers.csv` with the five GLBs beside it is a working example
+for routes 2 and 3; dropping those six files onto the viewer reproduces the
+bundled dataset from disk.
 
 ---
 
@@ -251,9 +294,10 @@ recognised the same way in the rail and in the scene.
 | `styles.css`      | All styling and theming: the CSS custom properties, both rails, the responsive / mobile layout. |
 | `core/`           | The DOM-free library: scenes, cameras, clipping, sync, layer & anatomy loading, view state — events out, adapters in. Entry `core/index.js`; see [Using the core in your own page](#using-the-core-in-your-own-page). |
 | `app/browser-adapters.js` | The one browser-only seam: WebGL renderer, OrbitControls on the canvas, resize observation. |
-| `app/ui/`         | The view: `chrome.js` (toasts, confirm, HUD, study menu, status-bar mirrors of the view events), `layer-panel.js` and `anatomy-panel.js` (the two rails — DOM in, `wb.*` calls out, events rendered back). |
+| `app/ui/`         | The view: `chrome.js` (toasts, confirm, HUD, study menu, status-bar mirrors of the view events), `layer-panel.js` and `anatomy-panel.js` (the two rails — DOM in, `wb.*` calls out, events rendered back), `import-panel.js` (the Import dialog and the drop targets). |
+| `app/local-files.js` | Wraps the network `io` so meshes imported from disk are served from memory under their `local:` paths. |
 | `viewer.js`       | The controller entry: builds the workbench with the browser adapters, reads the URL, wires the top-level controls and runs the frame loop. |
-| `data-loader.js`  | Loads & parses the dataset manifest; resolves optimized assets. |
+| `data-loader.js`  | Loads & parses the dataset manifest (from a URL or from text); builds samples from the user's own files; resolves optimized assets. |
 | `asset-loader.js` | Streaming downloads with progress, cancellation & caching. |
 | `optimized/`      | Pre-optimized GLBs that ship with the app.                 |
 | `optimized/anatomy/` | The reference eye models, their provenance and licences. |
@@ -269,14 +313,15 @@ The manifest lists, per sample, each segmented structure and a link to its mesh.
 
 #### The manifest format
 
-`?dataset=<url>` points the viewer at any CSV with these columns. Header names
-are matched case-insensitively and column order does not matter:
+`?dataset=<url>`, the Import dialog's URL field, and a CSV dropped with its
+meshes all read the same format. Header names are matched case-insensitively
+and column order does not matter:
 
 | Column | Required | Meaning |
 |---|---|---|
 | `sample_name` | yes | Groups rows into samples and labels the sample. Rows sharing a name become one sample. |
 | `file_name` | yes | Identifies the structure within its sample — the structure id is `<sample>__<file_name>` — and is the label when `seg_mesh_label` is absent. |
-| `seg_mesh_link` | yes | Where the mesh is downloaded from. The extension picks the parser: `.glb` / `.gltf` are read as glTF, anything else as binary STL. |
+| `seg_mesh_link` | yes | Where the mesh is downloaded from. The extension picks the parser: `.glb` / `.gltf` are read as glTF, anything else as binary STL. For a manifest imported with its meshes, a bare file name matches a supplied file. |
 | `seg_mesh_label` | no | Display label; falls back to `file_name` when missing or empty. |
 | `sample_link` | no | Provenance link, shown as the ↗ beside the sample. Defaults to empty. |
 | `notes` | no | Free text carried onto the structure record (parsed, but not displayed today). Defaults to empty. |
@@ -320,10 +365,11 @@ shown for orientation:
 | `upat`     | [Upatras OpenSim oculomotor model](https://simtk.org/projects/eye) ([arXiv:1807.07332](https://arxiv.org/abs/1807.07332)) — globe, cornea/pupil + six extraocular muscles | 8 | CC BY 4.0 |
 
 All three are **human** eyes while the segmented scan is **mouse**; they are
-references for orientation, not for morphometric comparison. The model menu also
-lists the projects surveyed that ship no 3D geometry (ISETBio, OpenRetina,
-V-Cornea, OpenEyeSim, pulse2percept, Open Source Brain), disabled and with the
-reason, rather than hiding them.
+references for orientation, not for morphometric comparison. The model menu
+offers only these three. The other open eye-modelling projects that were
+surveyed for this pane and ship no 3D geometry (ISETBio, OpenRetina, V-Cornea,
+OpenEyeSim, pulse2percept, Open Source Brain) are recorded, each with the reason
+it was rejected, in the provenance README linked below.
 
 The models keep their upstream licences and are merely aggregated with the
 viewer's MIT code. Full provenance, structure tables and licences:
@@ -381,7 +427,8 @@ git does not carry tags across a pull request.
 | `awg-retina-tomography-ui/browser` | `browserAdapters(el)` and `mountPane(pane, el)` — the WebGL / OrbitControls / ResizeObserver half |
 | `awg-retina-tomography-ui/headless` | `headlessAdapters()` and `stubElement()` — a stub renderer plus the real OrbitControls, for Node. Deliberately not on the barrel, so a browser build never pulls them in |
 | `awg-retina-tomography-ui/asset-loader` | `fetchBuffer` / `isCached` / `clearCache` — streaming downloads with progress, cancellation and Cache Storage |
-| `awg-retina-tomography-ui/data-loader` | the CSV manifest parser and the asset-resolution helpers — `loadCSVData`, `samplesData`, `fileKind`, `deriveOptimizedURL`, `resolveStructure`, `probeSizes`, `formatBytes` — if you want this repo's dataset format too |
+| `awg-retina-tomography-ui/data-loader` | the CSV manifest parser and the asset-resolution helpers — `loadCSVData`, `parseManifest`, `samplesFromFiles`, `samplesData`, `fileKind`, `isMeshFile`, `deriveOptimizedURL`, `resolveStructure`, `probeSizes`, `formatBytes` — if you want this repo's dataset format or its file import too |
+| `awg-retina-tomography-ui/local-files` | `createLocalIo(base)` — wraps an `io` so the `local:` paths `samplesFromFiles` produces are read from memory |
 
 ### A minimal page
 
@@ -610,14 +657,17 @@ clipping planes and caps, camera sync, STL/glTF parsing of synthetic meshes,
 the layer and anatomy loading state machines, and every workbench transition —
 plus a static scan proving no core module reaches for a browser global, and
 the `app/ui/` view modules rendered into a small fake DOM over a headless
-workbench (507 tests, Node's built-in runner; `three` is the only devDependency
-the unit tests need — `@playwright/test` serves the browser suite alone).
+workbench, and the file-import path (the manifest parser on text, samples built
+from picked files, the local-file `io`, the Import dialog and drop targets)
+(540 tests, Node's built-in runner; `three` is the only devDependency the unit
+tests need — `@playwright/test` serves the browser suite alone).
 `npm run test:e2e` drives the actual application in Chromium — Playwright
 starts `tools/dev-serve.py` on port 8124 itself, so python3 must be on PATH —
 and checks that WebGL starts, that a toggled layer reaches the GPU, that the
-asset cache fills, and that the controls behave (18 tests). Both run in CI on
-every pull request and on pushes to `main`, along with a decode of every
-shipped asset.
+asset cache fills, that files picked from disk and a manifest URL typed into
+the dialog both reach the scene, and that the controls behave (20 tests). Both
+run in CI on every pull request and on pushes to `main`, along with a decode of
+every shipped asset.
 
 ## Benchmarks
 

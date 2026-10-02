@@ -1,0 +1,27 @@
+name: Draft JOSS paper
+
+# Builds paper.md + paper.bib into the PDF the journal will render, so the
+# layout, word count and references can be checked before submission. Runs
+# when either file changes and on demand; the PDF is an artifact of the run.
+on:
+  push:
+    paths: ['paper.md', 'paper.bib', 'figure.png']
+  pull_request:
+    paths: ['paper.md', 'paper.bib', 'figure.png']
+  workflow_dispatch:
+
+jobs:
+  paper:
+    runs-on: ubuntu-latest
+    name: Paper draft
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build draft PDF
+        uses: openjournals/openjournals-draft-action@master
+        with:
+          journal: joss
+          paper-path: paper.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paper
+          path: paper.pdf

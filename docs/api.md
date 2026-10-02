@@ -31,7 +31,7 @@ downloaded until you call `anatomy.load()` or `layers.load(...)`.
 | `io` | yes in practice | `{ fetchBuffer(url, { signal, onProgress }), isCached(url) }`. The workbench is constructed without it, but a `load()` then fails and reports the failure as an error event. |
 | `loaders` | no | From [`createLoaders`](#createloadersopts). Built with the default Draco decoder path when omitted. |
 | `parsers` | no | From [`createMeshParsers`](#createmeshparsersloaders). Derived from `loaders` when omitted. |
-| `modelId` | no | The `?model=` value for the reference eye. An unknown, unavailable or missing id falls back to `mesheye`. |
+| `modelId` | no | The `?model=` value for the reference eye. An unknown or missing id falls back to `mesheye`. |
 | `anatomyUrl` | no | Overrides the reference-eye file outright, bypassing the registry. |
 | `startTime` | no | Seeds the fps window; the app passes `performance.now()`. Default `0`. |
 
@@ -111,6 +111,7 @@ them.
 | `load(structure)` | Download through `io.fetchBuffer`, parse with `parsers`, attach, colour, normalise, re-frame. Emits `layer:state` `loading` (`phase` `start`, then `cache` or repeated `layer:progress`, then `build`), and finally `loaded` with `cached`. A failure emits `layer:state` `error` + `layer:error`; an abort emits a single `layer:state` `idle`. Never rejects — even a missing `io` arrives as `layer:error`. |
 | `abort(id)` | Cancel that download. Says nothing itself — the `idle` comes from `load`. |
 | `abortAll()` | Cancel every in-flight download. |
+| `clear()` | Drop every loaded layer and sample group — the dataset is being replaced. Cancels in-flight downloads (each ends in its one `idle`), disposes the objects, forgets the samples, unfits the pane and emits one `layers:visible` for the empty pane. |
 | `reloadFillVariants()` | Re-load every loaded F10 coat from the currently selected variant, preserving each row's visibility. Awaited by `setSolidFill`. |
 | `isHeavy(structure)` | `true` when the record's `bytes` exceed `HEAVY_BYTES` (400 MB). The rule only — the confirm prompt belongs to the app. |
 | `effectivePath(structure)` | The URL `load` would fetch, honouring Solid fill. |
@@ -286,11 +287,11 @@ Plain data, no DOM, no Three: the models the left pane can show.
 
 | Export | What it is |
 |---|---|
-| `ANATOMY_MODELS` | Every model, including the surveyed ones flagged `unavailable` with the reason they ship no geometry. |
+| `ANATOMY_MODELS` | The three loadable models. The surveyed projects that ship no geometry are documented in `optimized/anatomy/README.md`, not listed here. |
 | `DEFAULT_MODEL_ID` | `'mesheye'`. |
 | `STRUCTURE_STYLES` | The per-structure defaults (label, group, colour, opacity, roughness, nesting `depth`, and `coat` for the structures the µCT also resolves). |
-| `modelById(id)` | The model record, or `undefined` for an unknown or unavailable id. |
-| `resolveModelId(id)` | `id` when it names an available model, else `DEFAULT_MODEL_ID`. The `?model=` rule. |
+| `modelById(id)` | The model record, or `undefined` for an unknown id. |
+| `resolveModelId(id)` | `id` when it names a registered model, else `DEFAULT_MODEL_ID`. The `?model=` rule. |
 | `structureMeta(model, key)` | One structure's metadata within a model, or `undefined`. |
 | `presetOf(model, name)` | A named preset, or `undefined`. |
 
@@ -370,9 +371,25 @@ it.
 [README](../README.md#the-manifest-format)). `loadCSVData(csvUrl)` fetches and
 parses the manifest into `samplesData` — trying up to four times with backoff,
 because Hugging Face's edge answers the first cold request with HTTP 405 — and
-appends the synthetic demo sample unless `?demo=off`. `fileKind(url)` maps an
-extension to `'gltf'` or `'stl'`; `deriveOptimizedURL(url)` maps an STL URL to
-its `optimized/….glb` path (`null` for anything else); `resolveStructure(st)`
-switches a structure to its optimized copy when one is published and learns its
-byte size (idempotent, memoised); `probeSizes(onResolved)` does that for every
-structure; `formatBytes(n)` is the human-readable size used in the UI.
+appends the synthetic demo sample unless `?demo=off`. `parseManifest(text)` is
+the pure parser under it (no fetch, no `location`, nothing written to
+`samplesData`). `samplesFromFiles(files, { existing })` builds sample records
+from `File` objects the user picked or dropped — meshes alone become one
+`Imported` sample with one structure per file; a CSV among them is parsed and
+its rows matched to the files by name — giving each local structure a
+`local:<name>` path, its `bytes`, `local: true` and `_resolved: true`, and
+returning `{ samples, files, skipped }`, where `files` is the map
+`createLocalIo().add()` takes. `fileKind(url)` maps an extension to `'gltf'` or
+`'stl'`; `isMeshFile(name)`, `baseName(name)` and `labelFromFileName(name)` are
+the file-name helpers behind the import; `deriveOptimizedURL(url)` maps an STL
+URL to its `optimized/….glb` path (`null` for anything else);
+`resolveStructure(st)` switches a structure to its optimized copy when one is
+published and learns its byte size (idempotent, memoised); `probeSizes(onResolved)`
+does that for every structure; `formatBytes(n)` is the human-readable size used
+in the UI.
+
+**`./local-files`** — `createLocalIo(base)` wraps a network `io` so that
+`local:` paths are read from the files registered with `add(map)` (one complete
+progress report, `AbortError` if the signal fires) while every other URL goes to
+`base`; `isCached` answers `true` for a local path. `isLocalPath(url)` and
+`LOCAL_PREFIX` are the scheme.

@@ -148,17 +148,19 @@ describe('package.json packaging', () => {
     assert.equal(pkg.exports['./core/*'], './core/*.js');
     assert.equal(pkg.exports['./data-loader'], './data-loader.js');
     assert.equal(pkg.exports['./asset-loader'], './asset-loader.js');
+    assert.equal(pkg.exports['./local-files'], './app/local-files.js');
     for (const [sub, target] of Object.entries(pkg.exports)) {
       if (sub.includes('*')) continue;
       assert.ok(existsSync(join(ROOT, target)), `${sub} → ${target} must exist`);
     }
   });
 
-  test('files whitelist ships the library, its two I/O helpers and the browser seam only', () => {
+  test('files whitelist ships the library, its I/O helpers and the browser seam only', () => {
     // The browser adapters are documented as `<name>/browser` (README: "Using
-    // the core in your own page"), so they ship; the app/ui view modules and
-    // viewer.js do not — a consumer brings its own.
-    assert.deepEqual(pkg.files, ['core', 'app/browser-adapters.js', 'data-loader.js', 'asset-loader.js', 'README.md', 'LICENSE']);
+    // the core in your own page"), so they ship, as does the local-file io
+    // (`<name>/local-files`); the app/ui view modules and viewer.js do not —
+    // a consumer brings its own.
+    assert.deepEqual(pkg.files, ['core', 'app/browser-adapters.js', 'app/local-files.js', 'data-loader.js', 'asset-loader.js', 'README.md', 'LICENSE']);
     assert.ok(!pkg.files.includes('app'), 'app/ui is not part of the package');
     assert.ok(existsSync(join(ROOT, 'LICENSE')));
     assert.equal(pkg.sideEffects, false);

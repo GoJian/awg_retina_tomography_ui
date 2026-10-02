@@ -324,6 +324,9 @@ describe('study selector', () => {
     assert.match(items[1].innerHTML, /content_copy/, 'a demo sample gets the copy icon');
     buildStudyMenu(wb, samples.slice(0, 1));
     assert.equal(dom.doc.el('#study-menu').children.length, 1, 'rebuilt from scratch');
+    buildStudyMenu(wb, [{ id: 'imp', label: 'Imported', imported: true, structures: [] }]);
+    assert.match(dom.doc.el('#study-menu').children[0].innerHTML, /upload_file/, 'an imported sample gets the upload icon');
+    assert.match(dom.doc.el('#study-menu').children[0].innerHTML, /0 layers</);
   });
 
   test('clicking an item focuses that sample and closes the menu', () => {

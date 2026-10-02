@@ -4,7 +4,7 @@
 //  two), visibility syncing with and without an object, the sample offset /
 //  opacity rules and their sample:offset events, the empty-samples default,
 //  the clip bounds every move re-derives, the solid-fill reload cycle,
-//  framing, and the pure solidVariant /
+//  clear() when a dataset is replaced, framing, and the pure solidVariant /
 //  effectivePath / isHeavy rules. Meshes come from the in-memory fixtures and
 //  bytes from stubIo; nothing here touches a DOM.
 // ============================================================================
@@ -809,5 +809,69 @@ describe('reloadFillVariants', () => {
     assert.equal(idle.length, 1);
     assert.equal(ctx.of('layer:error').length, 0);
     assert.ok(ctx.layers.featureObjects.get('f10').getObjectByName('retina_solid'), 'the solid variant won');
+  });
+});
+
+// ---------------------------------------------------------------------------
+//  clear()
+// ---------------------------------------------------------------------------
+describe('clear()', () => {
+  test('disposes every loaded layer and group, forgets the samples, unfits, and reports the empty pane once', async () => {
+    const a = structure('a', 's1'), c = structure('c', 's2');
+    const ctx = makeCtx({ samples: [sample('s1', [a]), sample('s2', [c])] });
+    await ctx.layers.load(a);
+    await ctx.layers.load(c);
+    assert.equal(ctx.layers.featureObjects.size, 2);
+    assert.equal(ctx.layers.groupCount(), 2);
+    const objA = ctx.layers.featureObjects.get('a');
+    const dispose = mock.method(objA.children[0]?.geometry ?? objA.geometry, 'dispose');
+    const before = ctx.events.length;
+
+    ctx.layers.clear();
+
+    assert.equal(ctx.layers.featureObjects.size, 0);
+    assert.equal(ctx.layers.groupCount(), 0);
+    assert.equal(ctx.pane.root.children.filter((o) => o.userData?.sampleId).length, 0, 'groups left the pane');
+    assert.equal(objA.parent, null);
+    assert.equal(dispose.mock.callCount(), 1, 'geometry disposed');
+    assert.equal(ctx.layers.stlFitted, false);
+    assert.deepEqual(ctx.layers.samples, []);
+    assert.equal(ctx.layers.has('a'), false);
+    const after = ctx.events.slice(before);
+    assert.deepEqual(after, [{ evt: 'layers:visible', anyVisible: false, visibleIds: [] }]);
+  });
+
+  test('cancels in-flight downloads (one idle each) and a parse that finishes after it places nothing', async () => {
+    const a = structure('a', 's1'), b = structure('b', 's1');
+    const ctx = makeCtx({ samples: [sample('s1', [a, b])], progressTicks: 3 });
+    const p1 = ctx.layers.load(a);
+    const p2 = ctx.layers.load(b);
+    await new Promise((r) => setTimeout(r, 0));
+    ctx.layers.clear();
+    await Promise.all([p1, p2]);
+    const states = ctx.of('layer:state').filter((e) => e.state === 'idle').map((e) => e.id).sort();
+    assert.deepEqual(states, ['a', 'b']);
+    assert.equal(ctx.of('layer:state').some((e) => e.state === 'loaded'), false);
+    assert.equal(ctx.layers.featureObjects.size, 0);
+    assert.equal(ctx.layers.inFlight.size, 0);
+  });
+
+  test('the next load after clear() re-fits the workspace as a first load would', async () => {
+    const a = structure('a', 's1');
+    const ctx = makeCtx({ samples: [sample('s1', [a])] });
+    await ctx.layers.load(a);
+    ctx.layers.clear();
+    ctx.layers.setSamples([sample('s1', [a])]);
+    const fit = mock.method(ctx.layers, 'fitStl');
+    await ctx.layers.load(a);
+    assert.equal(fit.mock.callCount(), 1);
+    assert.equal(ctx.layers.stlFitted, true);
+    assert.equal(ctx.layers.groupCount(), 1);
+  });
+
+  test('on an empty controller it is a harmless no-op that still reports', () => {
+    const ctx = makeCtx();
+    ctx.layers.clear();
+    assert.deepEqual(ctx.events, [{ evt: 'layers:visible', anyVisible: false, visibleIds: [] }]);
   });
 });

@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="description" content="Retina Tomography Viewer — a dark, clinical 3D workbench for GeneLab AWG retina micro-tomography: eye anatomy and segmented tissue layers with tri-planar slicing." />
+  <meta name="description" content="OcuLayer — a zero-install browser viewer for segmented ocular micro-tomography: a reference eye and the segmented tissue layers of a scan in two linked 3D views, with tri-planar slicing. Built for GeneLab AWG retina micro-CT; loads your own meshes too." />
   <meta name="color-scheme" content="dark" />
-  <title>Retina Tomography Viewer</title>
+  <title>OcuLayer · Retina Tomography Viewer</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%2306140e'/%3E%3Ccircle cx='12' cy='12' r='6.5' fill='none' stroke='%2334d399' stroke-width='1.7'/%3E%3Ccircle cx='12' cy='12' r='2.4' fill='%2334d399'/%3E%3C/svg%3E" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -29,8 +29,8 @@
     <div class="brand">
       <div class="logo-mark"><span class="ms">neurology</span></div>
       <div class="wordmark">
-        <span class="brand-name">Retina Tomography Viewer</span>
-        <span class="brand-eyebrow">GENELAB AWG MICRO-TOMOGRAPHY</span>
+        <span class="brand-name">OcuLayer</span>
+        <span class="brand-eyebrow">RETINA TOMOGRAPHY · GENELAB AWG</span>
       </div>
     </div>
 
@@ -40,6 +40,10 @@
       <span class="ms">folder_open</span>
       <span class="mono" id="study-label">SAMPLE 1 · µCT · SEG</span>
       <span class="ms">expand_more</span>
+    </button>
+    <button id="btn-import" class="pill pill-accent" title="Load your own meshes or a manifest — files stay in your browser">
+      <span class="ms">upload_file</span>
+      <span class="mono">IMPORT</span>
     </button>
 
     <div class="live-status">
@@ -107,6 +111,7 @@
 
     <!-- ---------- Viewport (two linked panes) ---------- -->
     <main id="viewport">
+      <div id="drop-hint"><div class="drop-hint-card"><span class="ms">upload_file</span>Drop meshes (.glb · .gltf · .stl) or a CSV manifest to add them</div></div>
       <div id="sync-badge"><span class="ms">link</span>Rotation synced</div>
       <section id="pane-glb" class="pane" data-orient="S I R L">
         <div class="pane-label">Eye Anatomy</div>
@@ -232,7 +237,7 @@
 <dialog id="help-dialog">
   <div class="dialog-card">
     <button class="dialog-close icon-btn" aria-label="Close"><span class="ms">close</span></button>
-    <h2>Retina Tomography Viewer</h2>
+    <h2>OcuLayer</h2>
     <p>Two linked 3D views of GeneLab AWG retina micro-tomography: the whole <strong>eye anatomy</strong> on the left and toggleable <strong>segmented tissue layers</strong> on the right.</p>
     <h3>Controls</h3>
     <ul>
@@ -245,6 +250,8 @@
     <p>Structures tagged <span class="cite-tag">µCT</span> — retina, choroid, sclera — are resolved in <em>both</em> panes, so the reference anatomy and the segmented scan can be read against each other.</p>
     <h3>Data</h3>
     <p>Heavy source scans are decimated and Draco-compressed, cached in your browser, and stream with a progress bar. The Hugging Face dataset is unchanged.</p>
+    <h3>Your own data</h3>
+    <p><strong>Import</strong> in the top bar — or dropping files anywhere on the views — adds your own meshes as a new sample: any <strong>.glb</strong>, <strong>.gltf</strong> or binary <strong>.stl</strong>, or a CSV manifest together with the meshes it names. Files are read in the browser and never uploaded. A manifest that is already online loads from its URL in the same dialog, or as <code>?dataset=&lt;url&gt;</code> in the address bar, which makes the view shareable.</p>
     <p class="dialog-foot"><button class="link-btn" id="help-to-about">About &amp; citations →</button></p>
   </div>
 </dialog>
@@ -253,7 +260,7 @@
 <dialog id="about-dialog">
   <div class="dialog-card">
     <button class="dialog-close icon-btn" aria-label="Close"><span class="ms">close</span></button>
-    <h2>About</h2>
+    <h2>About OcuLayer</h2>
     <p>An interactive 3D viewer for segmented ocular micro-tomography — built to explore the four posterior-pole coats of the mouse eye (retina, RPE, choroid, sclera) reconstructed from NASA space-biology imaging.</p>
 
     <h3>Developer</h3>
@@ -312,6 +319,30 @@
   </div>
 </dialog>
 
-<script type="module" src="./viewer.js?v=9"></script>
+<!-- ===================== Import dialog ===================== -->
+<dialog id="import-dialog">
+  <div class="dialog-card">
+    <button class="dialog-close icon-btn" aria-label="Close"><span class="ms">close</span></button>
+    <h2>Import your own data</h2>
+    <p>Add a segmentation of your own beside the bundled one. Files are read in memory, in your browser — nothing is uploaded.</p>
+
+    <h3>From your computer</h3>
+    <div id="import-drop" class="drop-zone">
+      <span class="ms drop-icon">upload_file</span>
+      <div class="drop-text">Drop mesh files here — <strong>.glb</strong>, <strong>.gltf</strong> or binary <strong>.stl</strong> — or a CSV manifest together with the meshes it names.</div>
+      <button class="btn btn-primary" id="import-browse"><span class="ms">folder_open</span>Choose files…</button>
+      <input type="file" id="import-files" multiple accept=".csv,.glb,.gltf,.stl" hidden />
+    </div>
+
+    <h3>From a URL</h3>
+    <div class="url-row">
+      <input type="url" id="import-url" class="text-field mono" placeholder="https://…/manifest.csv" spellcheck="false" autocomplete="off" />
+      <button class="btn" id="import-load-url">Load</button>
+    </div>
+    <p class="dialog-note">A manifest is a CSV with <code>sample_name</code>, <code>file_name</code> and <code>seg_mesh_link</code> columns (optionally <code>seg_mesh_label</code>, <code>sample_link</code> and <code>notes</code>); the meshes it links must be served with CORS enabled. Loading a URL replaces the current dataset and writes it into the address bar as <code>?dataset=</code>, so the view can be shared as a link. <a href="https://github.com/GoJian/awg_retina_tomography_ui#loading-your-own-data" target="_blank" rel="noopener">Format details ↗</a></p>
+  </div>
+</dialog>
+
+<script type="module" src="./viewer.js?v=10"></script>
 </body>
 </html>
