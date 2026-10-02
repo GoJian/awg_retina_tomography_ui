@@ -496,8 +496,8 @@ resolved against *your* page, so either serve an `optimized/anatomy/` directory
 at that path or keep the override. Those GLBs are not in the installed package —
 `package.json`'s `files` ships `core/`, the adapters, `app/local-files.js`, the
 two loaders, `README.md` and `LICENSE`, and nothing else — so copy them out of
-a clone, and carry their upstream licences with them: the models are GPL-3.0 and CC BY 4.0, not MIT (see
-[`optimized/anatomy/README.md`](optimized/anatomy/README.md)). Note that
+a clone, and carry their upstream licences with them: the models are GPL-3.0
+and CC BY 4.0, not MIT (see [`optimized/anatomy/README.md`](optimized/anatomy/README.md)). Note that
 `/models/...` above is root-relative: it resolves only when you control the
 document root.
 
