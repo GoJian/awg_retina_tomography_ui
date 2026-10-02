@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-10-02
+
 ### Added
 
 - **Import your own data.** An **Import** button in the top bar and a
@@ -26,8 +28,8 @@ All notable changes to this project are documented here. The format follows
 ### Changed
 
 - The software is now called **OcuLayer**; "Retina Tomography Viewer" stays
-  as its descriptive subtitle. The repository, package and install paths are
-  unchanged.
+  as its descriptive subtitle. The repository name, package name and import
+  paths are unchanged.
 - The reference-eye menu lists only the three models it can load. The six
   open eye-modelling projects that were surveyed and ship no 3D geometry were
   shown as disabled entries; they are now recorded, with the reason each was
@@ -36,6 +38,11 @@ All notable changes to this project are documented here. The format follows
   availability check.
 - The JOSS paper is restructured to the journal's section set and word limit,
   and the second author's affiliation is corrected.
+- Releases, the install command and the live site now come from
+  `GoJian/awg_retina_tomography_ui` and
+  <https://gojian.github.io/awg_retina_tomography_ui/>. 1.0.0 was tagged on the
+  `kush1434` fork, before the core library was merged upstream, and its release
+  stays there.
 
 ## [1.0.0] — 2026-09-15
 
@@ -84,5 +91,6 @@ The first release: the viewer as a core library with a thin browser app over it.
   CLI version the shipped assets were built with: an unpinned CLI bundles a
   different meshoptimizer and will not reproduce them.
 
-[Unreleased]: https://github.com/kush1434/awg_retina_tomography_ui/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/GoJian/awg_retina_tomography_ui/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/GoJian/awg_retina_tomography_ui/releases/tag/v1.1.0
 [1.0.0]: https://github.com/kush1434/awg_retina_tomography_ui/releases/tag/v1.0.0

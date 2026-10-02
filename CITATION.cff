@@ -21,10 +21,10 @@ authors:
     orcid: "https://orcid.org/0000-0001-7214-1628"
     affiliation: "University of Wyoming, School of Computing, Laramie, Wyoming, USA"
 repository-code: "https://github.com/GoJian/awg_retina_tomography_ui"
-url: "https://kush1434.github.io/awg_retina_tomography_ui/"
+url: "https://gojian.github.io/awg_retina_tomography_ui/"
 license: MIT
-version: 1.0.0
-date-released: "2026-09-15"
+version: 1.1.0
+date-released: "2026-10-02"
 keywords:
   - micro-CT
   - visualization

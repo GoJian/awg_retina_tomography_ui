@@ -7,12 +7,8 @@ individually toggleable **segmented tissue layers** on the right — and loads
 [your own meshes or manifest](#loading-your-own-data) with a drag and drop.
 Built with [Three.js](https://threejs.org/) and a zero-build static front end.
 
-**Try it:** <https://kush1434.github.io/awg_retina_tomography_ui/> — nothing to
-install. That deployment serves the `v1.0.0` build this README documents,
-`core/` library included. The canonical host,
-<https://gojian.github.io/awg_retina_tomography_ui/>, tracks
-`GoJian/awg_retina_tomography_ui`'s `main` and still serves the pre-refactor
-viewer; it will pick up `core/` when the refactor lands there.
+**Try it:** <https://gojian.github.io/awg_retina_tomography_ui/> — nothing to
+install. The site is deployed from `main`.
 
 ![The viewer in split layout: the mesh.eye reference model on the left and the F10 segmented µCT layers on the right, both cut by a sagittal slice plane, with the anatomy and layer rail on the left and the view controls on the right](figure.png)
 
@@ -409,16 +405,12 @@ It is not on npm. Install it from git, or copy `core/`,
 import them by relative path:
 
 ```bash
-npm install github:kush1434/awg_retina_tomography_ui#v1.0.0 three@^0.169.0
+npm install github:GoJian/awg_retina_tomography_ui#v1.1.0 three@^0.169.0
 ```
 
 Pin `three`: it is a peer dependency declared as `^0.169.0`, and a bare `three`
 installs a far newer release that does not satisfy it, so npm warns on install.
-Pinning the tag rather than a branch keeps the install reproducible. The core
-library currently lives on this fork; once it lands on the upstream default
-branch **and** a `v1.0.0` tag is pushed there too, the same install works as
-`github:GoJian/awg_retina_tomography_ui#v1.0.0`. Merging alone will not do it —
-git does not carry tags across a pull request.
+Pinning the tag rather than a branch keeps the install reproducible.
 
 | Import | What you get |
 |---|---|
@@ -502,10 +494,10 @@ registry's default is used instead — but the registry's URLs
 (`optimized/anatomy/eye-anatomy.glb` and its siblings) are plain relative paths,
 resolved against *your* page, so either serve an `optimized/anatomy/` directory
 at that path or keep the override. Those GLBs are not in the installed package —
-`package.json`'s `files` ships `core/`, the adapters, the two loaders, `README.md`
-and `LICENSE`, and nothing else — so copy them out of a clone, and carry their
-upstream licences with them: the models are GPL-3.0 and CC BY 4.0, not MIT (see
-[`optimized/anatomy/README.md`](optimized/anatomy/README.md)). Note that
+`package.json`'s `files` ships `core/`, the adapters, `app/local-files.js`, the
+two loaders, `README.md` and `LICENSE`, and nothing else — so copy them out of
+a clone, and carry their upstream licences with them: the models are GPL-3.0
+and CC BY 4.0, not MIT (see [`optimized/anatomy/README.md`](optimized/anatomy/README.md)). Note that
 `/models/...` above is root-relative: it resolves only when you control the
 document root.
 
