@@ -158,14 +158,16 @@ the same command the [README](README.md#getting-it) gives — or, for work that 
 not in a release yet, the commit you tested against.
 
 **Cutting a release.** Move the changelog's Unreleased notes under the new
-version and its date, and add that version's link definition at the foot of
-[`CHANGELOG.md`](CHANGELOG.md); set `version` and `date-released` in
+version and its date, add that version's link definition at the foot of
+[`CHANGELOG.md`](CHANGELOG.md) and repoint `[Unreleased]` to
+`compare/vX.Y.Z...HEAD`; set `version` and `date-released` in
 [`CITATION.cff`](CITATION.cff) and `version` in [`package.json`](package.json)
-and `package-lock.json`; bump the install command here and in the
-[README](README.md#getting-it). Once that is merged to `main`, tag the merge
-commit `vX.Y.Z` on `GoJian/awg_retina_tomography_ui` and create the GitHub
-release from the tag, with the changelog section as its notes. Tags live on the
-repository they were pushed to, so a tag pushed to a fork is not a release.
+and `package-lock.json`; bump the current release and the install command above
+and in the [README](README.md#getting-it). Once that is merged to `main`, tag
+the merge commit `vX.Y.Z` on `GoJian/awg_retina_tomography_ui` and create the
+GitHub release from the tag, with the changelog section as its notes. A merged
+pull request does not carry tags, so push the tag to
+`GoJian/awg_retina_tomography_ui` itself, not to a fork.
 
 ## Licensing
 

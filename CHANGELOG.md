@@ -39,9 +39,10 @@ All notable changes to this project are documented here. The format follows
 - The JOSS paper is restructured to the journal's section set and word limit,
   and the second author's affiliation is corrected.
 - Releases, the install command and the live site now come from
-  `GoJian/awg_retina_tomography_ui` and <https://gojian.github.io/awg_retina_tomography_ui/>.
-  1.0.0 was tagged on the `kush1434` fork, before the core library was merged
-  upstream, and its release stays there.
+  `GoJian/awg_retina_tomography_ui` and
+  <https://gojian.github.io/awg_retina_tomography_ui/>. 1.0.0 was tagged on the
+  `kush1434` fork, before the core library was merged upstream, and its release
+  stays there.
 
 ## [1.0.0] — 2026-09-15
 
