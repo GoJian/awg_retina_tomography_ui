@@ -1,6 +1,6 @@
 {
   "name": "awg-retina-tomography-ui",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "OcuLayer — a zero-install browser viewer for segmented ocular micro-tomography (GeneLab AWG retina micro-CT)",
   "type": "module",
   "private": true,
@@ -9,7 +9,7 @@
     "type": "git",
     "url": "https://github.com/GoJian/awg_retina_tomography_ui.git"
   },
-  "homepage": "https://kush1434.github.io/awg_retina_tomography_ui/",
+  "homepage": "https://gojian.github.io/awg_retina_tomography_ui/",
   "engines": {
     "node": ">=20"
   },

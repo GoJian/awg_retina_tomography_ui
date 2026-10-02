@@ -149,23 +149,23 @@ binding check, not a style preference.
 
 **Breaking changes.** `core/`'s exported API follows semantic versioning; a
 breaking change needs a major version and a [`CHANGELOG.md`](CHANGELOG.md) entry.
-Releases are git tags of the form `vMAJOR.MINOR.PATCH`; the current release is
-`v1.0.0`. Because the package is not on npm, an install resolves to whatever the
-branch you name points at that day, so pin a release tag rather than a branch —
-`npm install github:kush1434/awg_retina_tomography_ui#v1.0.0 three@^0.169.0`,
+Releases are git tags of the form `vMAJOR.MINOR.PATCH` on
+`GoJian/awg_retina_tomography_ui`; the current release is `v1.1.0`. Because the
+package is not on npm, an install resolves to whatever the branch you name
+points at that day, so pin a release tag rather than a branch —
+`npm install github:GoJian/awg_retina_tomography_ui#v1.1.0 three@^0.169.0`,
 the same command the [README](README.md#getting-it) gives — or, for work that is
 not in a release yet, the commit you tested against.
 
-**After the refactor lands upstream.** The tag and the release live on the fork,
-so the changelog's compare links and that install command both point at
-`kush1434`. Merging the pull request does not move them: git does not carry tags
-across a merge. Retargeting them at `GoJian` before its tag exists would leave
-404s and a broken install line, so the order is — push `v1.0.0` to `GoJian`,
-create the release there, then repoint the two link definitions at the foot of
-[`CHANGELOG.md`](CHANGELOG.md), the install command in the README, and the
-`homepage` in [`package.json`](package.json) and `url` in
-[`CITATION.cff`](CITATION.cff) — both currently name the fork's deployment,
-because `GoJian`'s Pages still serves the pre-refactor build.
+**Cutting a release.** Move the changelog's Unreleased notes under the new
+version and its date, and add that version's link definition at the foot of
+[`CHANGELOG.md`](CHANGELOG.md); set `version` and `date-released` in
+[`CITATION.cff`](CITATION.cff) and `version` in [`package.json`](package.json)
+and `package-lock.json`; bump the install command here and in the
+[README](README.md#getting-it). Once that is merged to `main`, tag the merge
+commit `vX.Y.Z` on `GoJian/awg_retina_tomography_ui` and create the GitHub
+release from the tag, with the changelog section as its notes. Tags live on the
+repository they were pushed to, so a tag pushed to a fork is not a release.
 
 ## Licensing
 
