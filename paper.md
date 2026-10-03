@@ -112,7 +112,7 @@ Discarding 98.5% of `eye.stl`'s triangles moves the surface by 0.017% of the dia
 the worst-case (Hausdorff) distances, 3.99% and 1.10%, fall almost entirely in the
 original-to-decimated direction, consistent with fragments removed rather than the principal
 surface displaced. The result is an instrument for orientation and triage, not morphometry. A
-first visit transfers about 405 KB — a 190 KB shell, served gzipped at 61 KB, plus the 343 KB
+first visit transfers about 411 KB — a 210 KB shell, served gzipped at 68 KB, plus the 343 KB
 Draco-compressed anatomy — against 1.13 GB of source meshes, with `three` and the Draco decoder
 fetched from CDNs on top.
 
@@ -151,36 +151,36 @@ by URL. CI runs both suites and decodes every shipped asset, so a corrupt mesh f
 
 # AI usage disclosure
 
-Generative AI was used in preparing this submission. The tools were Claude (Anthropic), accessed
-through Claude Code, in September and October 2026, using Claude Opus 5 (`claude-opus-5`), Claude
-Fable 5.1 (`claude-fable-5-1`) and Claude Opus 5.5 (`claude-opus-5-5`).
+Generative AI was used in developing this software and preparing this submission: Claude
+(Anthropic), accessed through Claude Code from June to October 2026, using Claude Opus 4.8
+(`claude-opus-4-8`), Claude Opus 5 (`claude-opus-5`), Claude Fable 5.1 (`claude-fable-5-1`) and
+Claude Opus 5.5 (`claude-opus-5-5`).
 
-- *The application.* The viewer as it existed before this submission — `viewer.js`, the two
-  loaders, the optimisation pipeline and the anatomy-model build scripts, developed between
-  October 2025 and August 2026 — was written with AI assistance, using Claude through Claude
-  Code, as was the file-import path added for this submission.
-- *Core-library refactor.* The DOM-free `core/` library was extracted from the monolithic
-  `viewer.js` with AI assistance, following a written architecture plan the authors reviewed;
-  each step was gated on the full test suite and verified against the unchanged end-to-end
-  tests.
-- *Tests.* The unit-test suite and the Playwright suite were generated with AI assistance from
-  the authors' description of the intended behaviour, then run, corrected and reviewed by the
-  authors. Two AI-written assertions were wrong about the software's behaviour and were corrected
-  against the code, not the other way round.
-- *Benchmark tooling.* `tools/bench/` — the asset inventory and the point-to-surface error
-  measurement — was implemented with AI assistance. Its correctness rests on the geometry tests,
-  which cross-check the spatial index against brute force, and the numbers reported here were
-  produced by running the tool, not by the model.
-- *Documentation and paper.* `CONTRIBUTING.md`, the README sections on testing, benchmarking and
-  data import, and the text of this paper were drafted with AI assistance and edited by the
-  authors. The authors verified bibliographic entries against Crossref, arXiv and Zenodo records.
+- *The application.* The first viewer (November 2025 to January 2026) was written without AI.
+  From June 2026 it was rewritten with AI assistance: Claude Opus 4.8 wrote `viewer.js`,
+  `asset-loader.js`, the decimation pipeline and the shipped µCT meshes; Opus 5 the anatomy-model
+  build scripts; Opus 5.5 the file import.
+- *Core-library refactor.* The DOM-free `core/` library was extracted from `viewer.js` with
+  Claude Fable 5.1, following a written architecture plan the authors reviewed; each step was
+  gated on the full test suite and verified against the unchanged end-to-end tests.
+- *Tests.* The unit and Playwright suites were generated with AI assistance from the authors'
+  description of the intended behaviour.
+- *Benchmark tooling.* `tools/bench/` was implemented with AI assistance. Its correctness rests on
+  the geometry tests, which cross-check the spatial index against brute force, and the numbers
+  reported here are the tool's output, not the model's.
+- *Eye-model survey.* The survey of open eye-modelling projects and the licence-and-geometry audit
+  in `optimized/anatomy/README.md` were done with Claude Opus 5.
+- *Documentation and paper.* The README, `CONTRIBUTING.md`, `docs/api.md`, the changelog, the
+  citation file and this paper were drafted with AI assistance and edited by the authors; the
+  figure was captured by an AI session driving the application. Bibliographic entries were checked
+  against Crossref, arXiv and Zenodo with AI assistance and confirmed by the authors.
 
-The authors reviewed, edited and validated all AI-assisted output, ran every test and benchmark
-themselves, and made the core design decisions: the two-pane linked-view concept, shipping
-decimated Draco assets with a documented accuracy budget, using published open eye models as
-reference anatomy, the survey of open eye-modelling projects, and the in-browser import of a
-user's own data. The authors take full responsibility for the accuracy, originality and licensing
-of all submitted material.
+The authors ran the tests and benchmarks through Claude Code and checked the results, reviewed,
+edited and validated all AI-assisted output, and made the core design decisions: the two-pane
+linked-view concept, shipping decimated Draco assets with a documented accuracy budget, using
+published open eye models as reference anatomy, and the in-browser import of a user's own data.
+The authors take full responsibility for the accuracy, originality and licensing of all submitted
+material.
 
 # Acknowledgements
 
