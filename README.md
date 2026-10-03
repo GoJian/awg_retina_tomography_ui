@@ -24,7 +24,7 @@ data, which is what the segmentation looks like and how its coats sit relative
 to a whole eye.
 
 This viewer answers that question in a browser tab, with nothing installed and
-about 405 KB of first-party payload on a first visit. It is built for three
+about 411 KB of first-party payload on a first visit. It is built for three
 audiences: the GeneLab AWG space-biology researchers who produced the scans and
 want to check or show them; ophthalmology and anatomy teaching, where the
 segmented coats can be read against a published reference eye in the other pane;
@@ -63,7 +63,7 @@ quantifies exactly how much accuracy that costs.
   [Loading your own data](#loading-your-own-data).
 - **Fast by default** — heavy source scans (≈1 GB STL meshes) are decimated and
   Draco-compressed to a few hundred KB each and shipped with the app, so a first
-  visit downloads about 405 KB of first-party payload over the wire — 534 KB
+  visit downloads about 411 KB of first-party payload over the wire — 553 KB
   raw — instead of over 1 GB, rising to 3.2 MB only if every layer is toggled
   on. The first-party numbers come from `tools/bench`; see
   [Benchmarks](#benchmarks). On top of them a cold visit also fetches about
@@ -685,8 +685,8 @@ Measured on the shipped assets:
 | `eye.stl` | 21,141,576 | 1008 MB | 633 KB | 1631x | 0.017% | +0.63% |
 | `feature.stl` | 3,131,220 | 149 MB | 325 KB | 471x | 0.006% | +0.21% |
 
-First paint: a 190 KB app shell (61 KB gzipped) plus the 343 KB default anatomy
-= 534 KB raw, 405 KB over the wire. Toggling on every segmented layer brings the
+First paint: a 210 KB app shell (68 KB gzipped) plus the 343 KB default anatomy
+= 553 KB raw, 411 KB over the wire. Toggling on every segmented layer brings the
 total to 3.2 MB.
 
 `tools/bench` walks this repository only, so those figures are first-party
