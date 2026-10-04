@@ -30,14 +30,16 @@ All notable changes to this project are documented here. The format follows
 - `tools/optimize/anatomy/requirements.txt` — the Python packages the
   reference-eye rebuild needs: `gmsh==4.15.2` and `trimesh==5.1.1` pinned,
   plus `numpy`, `networkx`, `scipy` (trimesh's mesh processing fails without
-  it) and `pillow` (the Upatras OBJs carry JPEG textures). The documented
-  setup listed neither of the last two.
+  it) and `pillow` (trimesh builds a placeholder texture for the Upatras OBJs,
+  which carry UV coordinates). The documented setup listed neither of the last
+  two.
 
 ### Changed
 
 - `tools/optimize/README.md`, the README and `build-anatomy.sh` install from
   `requirements.txt`, list the Debian/Ubuntu packages the `gmsh` wheel links
-  against (`libglu1-mesa libgl1 libxft2 libxinerama1 libxcursor1 libgomp1`),
+  against on Ubuntu (`libglu1-mesa libgl1 libxft2 libxinerama1 libxcursor1
+  libgomp1`),
   and `build-anatomy.sh` names the pinned `@gltf-transform/cli@4.0.0`.
 - The About dialog lists both authors, with the affiliations the paper gives.
 - The JOSS paper corrects claims an audit found false: a first visit fetches
