@@ -56,25 +56,28 @@ looking at it is unchanged.
 # State of the field
 
 3D Slicer [@fedorov2012slicer] and ITK-SNAP [@yushkevich2006itksnap] do more than this viewer,
-including named segments, per-segment visibility, colour and opacity, and synchronised cameras.
-Both are desktop installs, and Slicer's user guide advises "10x more memory than the amount of data
-that you load" [@slicerdocs]. In the browser, NiiVue [@niivue; @eckstein2026niivue], Neuroglancer
-[@neuroglancer] and itk-vtk-viewer [@itkvtkviewer] render meshes client-side, and all three
-already bind a dataset at run time as this viewer does: NiiVue's web app and itk-vtk-viewer take
-mesh URLs as `?images=` and `?fileToLoad=`, and a Neuroglancer scene is a pasteable link. The Open Anatomy Browser [@halle2017oabrowser] is closest,
-being zero-install, manifest-described, named and static. We claim novelty in none of this.
+including named segments, per-segment visibility, colour and opacity, and synchronised cameras. Both
+are desktop installs, and Slicer's user guide advises "10x more memory than the amount of data that
+you load" [@slicerdocs]. In the browser, NiiVue [@niivue; @eckstein2026niivue], Neuroglancer
+[@neuroglancer] and itk-vtk-viewer [@itkvtkviewer] render meshes client-side, and all three already
+bind a dataset at run time as this viewer does: NiiVue's web app and itk-vtk-viewer take mesh URLs
+as `?images=` and `?fileToLoad=`, and a Neuroglancer scene is a pasteable link. The Open Anatomy
+Browser [@halle2017oabrowser] is closest, being zero-install, manifest-described, named and static.
+We claim novelty in none of this.
 
 What none supplies is the other half of the comparison. None of the Open Anatomy atlases is ocular,
-and of six open eye-modelling projects we surveyed (ISETBio, OpenRetina, V-Cornea, OpenEyeSim,
-`pulse2percept` and Open Source Brain) none ships usable 3D geometry. This viewer therefore ships
-its own: three published eye models with per-structure names and provenance, in a second
-camera-linked pane. A multi-toggle layer panel would have been a fair contribution to
-itk-vtk-viewer, whose geometry panel selects one mesh at a time. The second pane would not:
-itk-vtk-viewer and the Open Anatomy Browser each build one model scene — one `vtkProxyManager`, and
-one `THREE.Scene` beside an orientation-axes inset — so a second populated scene changes a central
-assumption instead of extending it. Neuroglancer already links cameras across layer-group panes,
-but its mesh-file readers take OBJ, ASCII VTK and its own precomputed format, not the glTF or STL
-this viewer loads. Hence a small library over three.js [@threejs], not a fork.
+and of six open eye-modelling projects we surveyed (ISETBio [@cottaris2019isetbio], OpenRetina
+[@dagostino2026openretina], V-Cornea [@vanin2025vcornea], OpenEyeSim [@priamikov2016openeyesim],
+`pulse2percept` [@beyeler2017pulse2percept] and Open Source Brain [@gleeson2019osb]) none ships
+usable 3D geometry. This viewer therefore ships its own: three published eye models with
+per-structure names and provenance, in a second camera-linked pane. A multi-toggle layer panel would
+have been a fair contribution to itk-vtk-viewer, whose geometry panel selects one mesh at a time.
+The second pane would not: itk-vtk-viewer and the Open Anatomy Browser each build one model scene —
+one `vtkProxyManager`, and one `THREE.Scene` beside an orientation-axes inset — so a second
+populated scene changes a central assumption instead of extending it. Neuroglancer already links
+cameras across layer-group panes, but its mesh-file readers take OBJ, ASCII VTK and its own
+precomputed format, not the glTF or STL this viewer loads. Hence a small library over three.js
+[@threejs], not a fork.
 
 # Software design
 
@@ -89,21 +92,19 @@ a single module constructs the WebGL context. Freedom from the DOM is enforced b
 over `core/` rather than proved. In exchange the geometry, clipping and loading logic runs under
 Node in seconds.
 
-Data reaches the viewer by one path whatever its source: the default manifest, a manifest URL
-typed into the Import dialog or passed as `?dataset=`, and files dropped onto the page all become
-the same sample records. Dropped meshes are served to the
-core through an `io` wrapper that reads them from memory, so the core never learns that a `File`
-exists and nothing is uploaded. A manifest URL is written back into the address bar, which makes a
-view shareable as a link; a drop is not, because the files it names live on one
-machine.
+Data reaches the viewer by one path whatever its source: the default manifest, a manifest URL typed
+into the Import dialog or passed as `?dataset=`, and files dropped onto the page all become the same
+sample records. Dropped meshes are served to the core through an `io` wrapper that reads them from
+memory, so the core never learns that a `File` exists and nothing is uploaded. A manifest URL is
+written back into the address bar, which makes a view shareable as a link; a drop is not, because
+the files it names live on one machine.
 
-Decimation answers a client cost, not a hosting one: opening the full 1.0 GB `eye.stl` in the
-viewer took about 22 s on a 16 GB machine. A documented pipeline built on glTF Transform
-[@gltftransform] converts binary STL to glTF, welds it into an indexed mesh, decimates it with the
-`meshoptimizer` simplifier [@meshoptimizer] and compresses it with Draco [@draco]; layers stream
-on toggle into the Cache
-Storage API, so each mesh downloads at most once per browser. `tools/bench` measures the cost as a
-symmetric point-to-surface distance, area-weighted over both meshes and normalised by the
+Decimation answers a client cost, not a hosting one: the viewer loaded a 1 GB, 21 M-triangle STL in
+about 22 s on a 16 GB machine. A documented pipeline built on glTF Transform [@gltftransform]
+converts binary STL to glTF, welds it into an indexed mesh, decimates it with the `meshoptimizer`
+simplifier [@meshoptimizer] and compresses it with Draco [@draco]; layers stream on toggle into the
+Cache Storage API, so each mesh downloads at most once per browser. `tools/bench` measures the cost
+as a symmetric point-to-surface distance, area-weighted over both meshes and normalised by the
 bounding-box diagonal:
 
 | Mesh | Triangles | Source | Shipped | Reduction | Mean error | p99 | Area |
@@ -113,17 +114,17 @@ bounding-box diagonal:
 
 Discarding 98.5% of `eye.stl`'s triangles moves the surface by 0.017% of the diagonal on average;
 the worst-case (Hausdorff) distances, 3.99% and 1.10%, fall almost entirely in the
-original-to-decimated direction, consistent with fragments removed rather than the principal
-surface displaced. The result is an instrument for orientation and triage, not morphometry. A
-first visit transfers a 212 KB shell, served gzipped at 68 KB; loading the default reference eye
-adds 343 KB, against 1.13 GB of source meshes, with `three` and the Draco decoder fetched from
-CDNs on top.
+original-to-decimated direction, consistent with fragments removed rather than the principal surface
+displaced. The result is an instrument for orientation and triage, not morphometry. A first visit
+transfers a 212 KB shell, served gzipped at 68 KB; loading the default reference eye adds 343 KB,
+against 1.13 GB of source meshes, with `three` and the Draco decoder fetched from CDNs on top.
 
 The left pane holds third-party published anatomy, not NASA data: `feelpp/mesh.eye`
 [@chabannes2024mesheye; @sala2024ovs], the SolidWorks CAD eye it derives from, and the Upatras
-OpenSim oculomotor model with its six extraocular muscles [@filip2018upat], each with one named
-node per structure under its own upstream licence. Because these models are human while the segmentation is murine, the interface states that
-the left pane is for orientation, not cross-species morphometry.
+OpenSim oculomotor model with its six extraocular muscles [@filip2018upat], each with one named node
+per structure under its own upstream licence. Because these models are human while the segmentation
+is murine, the interface states that the left pane is for orientation, not cross-species
+morphometry.
 
 # Research impact statement
 
@@ -131,13 +132,11 @@ The NASA GeneLab Analysis Working Group, for whom the viewer was built, has used
 segmented µCT data and compare structures across it; the specimen in \autoref{fig:viewer} is that
 data.
 
-The viewer is deployed at <https://gojian.github.io/awg_retina_tomography_ui/>, and the data
-behind it are open and ungated. The
-segmented meshes, the CSV manifest, the source reconstruction slices and the full-resolution
-meshes the shipped assets were decimated from are published under MIT at
-<https://huggingface.co/datasets/kush1434/awg_retina_tomography_ui>, so a reader can recompute
-the reduction factors and error bounds above instead of taking them on trust. `tools/bench` uses a
-fixed seed, so runs are reproducible.
+The viewer is deployed at <https://gojian.github.io/awg_retina_tomography_ui/>, and the data behind
+it are open and ungated. The segmented meshes, the CSV manifest, the source reconstruction slices
+and the full-resolution meshes the shipped assets were decimated from are published under MIT on
+Hugging Face [@shah2025awgdata], so a reader can recompute the reduction factors and error bounds
+above instead of taking them on trust. `tools/bench` uses a fixed seed, so runs are reproducible.
 
 `optimized/anatomy/README.md` is a licence-and-geometry audit of nine entries from eight open
 eye-modelling projects: per-structure triangle counts, volumes and upstream DOIs for the three
@@ -148,8 +147,8 @@ under its own GPL-3.0 and CC BY 4.0 terms; MIT covers the viewer code only.
 549 unit tests on Node's built-in runner cover the data and caching layers, the file import, the
 geometry code behind the error figures above, and the core library, run headless under a stub
 renderer with the real orbit controls on synthetic STL and uncompressed glTF. 21 Playwright tests
-drive the real application in Chromium, including a file import from disk and a manifest loaded
-by URL. CI runs both suites and decodes every shipped asset, so a corrupt mesh fails the build.
+drive the real application in Chromium, including a file import from disk and a manifest loaded by
+URL. CI runs both suites and decodes every shipped asset, so a corrupt mesh fails the build.
 
 # AI usage disclosure
 

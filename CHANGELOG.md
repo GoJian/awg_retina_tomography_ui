@@ -40,6 +40,14 @@ All notable changes to this project are documented here. The format follows
   against (`libglu1-mesa libgl1 libxft2 libxinerama1 libxcursor1 libgomp1`),
   and `build-anatomy.sh` names the pinned `@gltf-transform/cli@4.0.0`.
 - The About dialog lists both authors, with the affiliations the paper gives.
+- The JOSS paper corrects claims an audit found false: a first visit fetches
+  only the app shell; the Open Anatomy Browser builds one model scene beside
+  an axes inset; NiiVue's web app also binds a dataset at run time
+  (`?images=`); and the gigabyte claim gives the measured load of a 1 GB STL
+  instead of an absolute. It now says why Neuroglancer's linked layer-group
+  panes were not extended, gives the deployed URL, credits glTF Transform for
+  the weld/simplify/Draco pipeline, and cites the six surveyed eye-modelling
+  projects and the Hugging Face dataset (eight new references).
 - `tools/bench` reports `First visit` (the app shell alone) and `Load model`
   (the shell plus the default anatomy) instead of a `First paint` line that
   counted the anatomy, which a first visit does not download until **Load
