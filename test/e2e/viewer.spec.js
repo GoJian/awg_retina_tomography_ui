@@ -221,7 +221,7 @@ test.describe('controls', () => {
     await expect.poll(() => triangleCount(page), { timeout: 20_000 }).toBeGreaterThan(1000);
   });
 
-  test('the help and about dialogs open and credit the model licences', async ({ page }) => {
+  test('the help and about dialogs open, credit the model licences and list both authors', async ({ page }) => {
     await page.goto(APP);
     await page.locator('#btn-help').click();
     await expect(page.locator('#help-dialog')).toBeVisible();
@@ -231,6 +231,10 @@ test.describe('controls', () => {
     await page.locator('#btn-about').click();
     await expect(page.locator('#about-dialog')).toBeVisible();
     await expect(page.locator('#about-dialog')).toContainText(/GPL|CC BY|licen[cs]e/i);
+    // Both authors, with the affiliations the paper gives.
+    await expect(page.locator('#about-dialog')).toContainText('Del Norte High School');
+    await expect(page.locator('#about-dialog')).toContainText('Jian Gong');
+    await expect(page.locator('#about-dialog')).toContainText('University of Wyoming');
   });
 });
 
