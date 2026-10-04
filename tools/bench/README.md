@@ -24,17 +24,19 @@ compression is present. That directory list is hard-coded in `shippedAssets()`
 at the top of `bench.mjs`, so a new asset directory has to be added there or it
 is silently skipped.
 
-The human-readable run then totals the first-paint payload: the app shell —
-`index.html`, its stylesheets, and the transitive closure of the relative module
-imports reachable from it, walked from `index.html` rather than listed, so the
-figure cannot go stale when a module moves — reported both raw and gzipped at
-level 6, plus the default anatomy GLB. The `.glb` assets are Draco-compressed
-already and are not gzipped again because they do not shrink further, so a host
-that serves text assets gzipped transfers the gzipped shell plus the raw GLB.
-This is where the 210 KB raw / 68 KB gzipped shell and the ~411 KB first visit
-reported in the top-level README and in `paper.md` come from. `--json` stops
-after the per-asset rows: it emits `generated` and `assets` only, none of the
-totals.
+The human-readable run then totals what a visit costs. `First visit` is the app
+shell — `index.html`, its stylesheets, and the transitive closure of the relative
+module imports reachable from it, walked from `index.html` rather than listed, so
+the figure cannot go stale when a module moves — reported both raw and gzipped
+at level 6; it is all a first visit fetches from this repository, because the
+reference eye waits behind the **Load model** button. `Load model` adds the
+default anatomy GLB that button downloads. The `.glb` assets are
+Draco-compressed already and are not gzipped again because they do not shrink
+further, so a host that serves text assets gzipped transfers the gzipped shell
+plus the raw GLB. This is where the 212 KB raw / 68 KB gzipped shell, the 343 KB
+default anatomy and the 412 KB total reported in the top-level README and in
+`paper.md` come from. `--json` stops after the per-asset rows: it emits
+`generated` and `assets` only, none of the totals.
 
 This runs against the repository as checked out and needs no external data, so
 CI decodes every shipped GLB on pushes to `main` and on every pull request; a
