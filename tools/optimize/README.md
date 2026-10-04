@@ -12,9 +12,13 @@ npm install -g @gltf-transform/cli@4.0.0   # pinned; provides `gltf-transform`
 npm install                                # @gltf-transform/core for the STL converter
 ```
 
-The pin matters: the CLI bundles its own meshoptimizer build, and an unpinned
-one will not reproduce the shipped assets or the reduction figures in the
-results table below. `4.0.0` is the version those assets were built with.
+The pin matters: CLI 4.0.0 pins its `meshoptimizer` dependency to 0.20.0, the
+simplifier behind `simplify`, and an unpinned CLI resolves a newer one that will
+not reproduce the shipped assets or the reduction figures in the results table
+below. `4.0.0` is the CLI version those assets were built with. Its
+`@gltf-transform/core`, `functions` and `extensions` dependencies still float
+within `^4` (the shipped GLBs record v4.4.0 and v4.4.2 as their generator), so a
+rebuild matches closely rather than byte for byte.
 
 Rebuilding the reference eye models (`./anatomy/build-anatomy.sh`) additionally
 needs `git` and the python3 packages in

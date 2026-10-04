@@ -368,8 +368,8 @@ shown for orientation:
 
 All three are **human** eyes while the segmented scan is **mouse**; they are
 references for orientation, not for morphometric comparison. The model menu
-offers only these three. The other open eye-modelling projects that were
-surveyed for this pane and ship no 3D geometry (ISETBio, OpenRetina, V-Cornea,
+offers only these three. The other open projects that were surveyed for this
+pane and ship no usable 3D eye geometry (ISETBio, OpenRetina, V-Cornea,
 OpenEyeSim, pulse2percept, Open Source Brain) are recorded, each with the reason
 it was rejected, in the provenance README linked below.
 

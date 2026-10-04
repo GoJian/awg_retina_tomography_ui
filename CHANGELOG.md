@@ -50,11 +50,21 @@ All notable changes to this project are documented here. The format follows
 - The JOSS paper corrects claims an audit found false: a first visit fetches
   only the app shell; the Open Anatomy Browser builds one model scene beside
   an axes inset; NiiVue's web app also binds a dataset at run time
-  (`?images=`); and the gigabyte claim gives the measured load of a 1 GB STL
-  instead of an absolute. It now says why Neuroglancer's and NiiVue's linked
+  (`?images=`); and the gigabyte claim gives a measured load of a 1 GB,
+  21 M-triangle STL (about 12 s and 4.6 GB of memory, against under a second
+  for the decimated copy) instead of an absolute. It now says why Neuroglancer's and NiiVue's linked
   panes were not extended (neither reads glTF), gives the deployed URL, credits glTF Transform for
   the weld/simplify/Draco pipeline, and cites the six surveyed eye-modelling
-  projects and the Hugging Face dataset (eight new references).
+  projects and the Hugging Face dataset at revision `97a92d3` (eight new
+  references). The survey is described as six related open projects, not six
+  eye-modelling ones, since Open Source Brain is a general model platform.
+- `optimized/anatomy/README.md` no longer calls OpenEyeSim unobtainable: its
+  code is public in `Klimmasch/AEC`, and its only eye mesh is a plain sphere.
+  The README and About dialog say the surveyed projects ship no *usable* 3D
+  eye geometry.
+- `tools/optimize/README.md` and `optimize.sh` say what the CLI pin actually
+  fixes: `meshoptimizer` 0.20.0, while `@gltf-transform/core`, `functions` and
+  `extensions` float within `^4`.
 - `tools/bench` reports `First visit` (the app shell alone) and `Load model`
   (the shell plus the default anatomy) instead of a `First paint` line that
   counted the anatomy, which a first visit does not download until **Load

@@ -7,8 +7,8 @@
 #   ./optimize.sh original/eye.stl ../../optimized/sample_1_seg_mesh/eye.glb 0.015
 #
 # Requires: node, and the gltf-transform CLI pinned to the version the shipped
-# assets were built with — an unpinned CLI bundles a different meshoptimizer and
-# will not reproduce them:
+# assets were built with — an unpinned CLI resolves a different meshoptimizer
+# and will not reproduce them:
 #   npm i -g @gltf-transform/cli@4.0.0
 set -euo pipefail
 

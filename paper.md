@@ -66,7 +66,7 @@ Open Anatomy Browser [@halle2017oabrowser] is closest, being zero-install, manif
 and static. We claim novelty in none of this.
 
 What none supplies is the other half of the comparison. None of the Open Anatomy atlases is ocular,
-and of six open eye-modelling projects we surveyed (ISETBio [@cottaris2019isetbio], OpenRetina
+and of six related open projects we surveyed (ISETBio [@cottaris2019isetbio], OpenRetina
 [@dagostino2026openretina], V-Cornea [@vanin2025vcornea], OpenEyeSim [@priamikov2016openeyesim],
 `pulse2percept` [@beyeler2017pulse2percept] and Open Source Brain [@gleeson2019osb]) none ships
 usable 3D geometry. This viewer therefore ships its own: three published eye models with
@@ -98,12 +98,13 @@ memory, so the core never learns that a `File` exists and nothing is uploaded. A
 written back into the address bar, which makes a view shareable as a link; a drop is not, because
 the files it names live on one machine.
 
-Decimation answers a client cost, not a hosting one: the viewer loaded a 1 GB, 21 M-triangle STL in
-about 22 s on a 16 GB machine. A documented pipeline built on glTF Transform [@gltftransform]
-converts binary STL to glTF, welds it into an indexed mesh, decimates it with the `meshoptimizer`
-simplifier [@meshoptimizer] and compresses it with Draco [@draco]; layers stream on toggle into the
-Cache Storage API, so each mesh downloads at most once per browser. `tools/bench` measures the cost
-as a symmetric point-to-surface distance, area-weighted over both meshes and normalised by the
+Decimation answers a client cost, not a hosting one: the viewer does load a 1 GB, 21 M-triangle STL,
+but reading and parsing it took about 12 s and 4.6 GB of memory, where the decimated copy loads in
+under a second. A documented pipeline built on glTF Transform [@gltftransform] converts binary STL
+to glTF, welds it into an indexed mesh, decimates it with the `meshoptimizer` simplifier
+[@meshoptimizer] and compresses it with Draco [@draco]; layers stream on toggle into the Cache
+Storage API, so each mesh downloads at most once per browser. `tools/bench` measures the cost as a
+symmetric point-to-surface distance, area-weighted over both meshes and normalised by the
 bounding-box diagonal:
 
 | Mesh | Triangles | Source | Shipped | Reduction | Mean error | p99 | Area |
@@ -139,10 +140,10 @@ Hugging Face [@shah2025awgdata], so a reader can recompute the reduction factors
 above instead of taking them on trust. `tools/bench` uses a fixed seed, so runs are reproducible.
 
 `optimized/anatomy/README.md` is a licence-and-geometry audit of nine entries from eight open
-eye-modelling projects: per-structure triangle counts, volumes and upstream DOIs for the three
-that distribute usable 3D eye geometry [@chabannes2024mesheye; @sala2024ovs; @filip2018upat], and
-a recorded check for the six that do not. That geometry is other groups' published work, carried
-under its own GPL-3.0 and CC BY 4.0 terms; MIT covers the viewer code only.
+projects: per-structure triangle counts, volumes and upstream DOIs for the three that distribute
+usable 3D eye geometry [@chabannes2024mesheye; @sala2024ovs; @filip2018upat], and a recorded check
+for the six that do not. That geometry is other groups' published work, carried under its own
+GPL-3.0 and CC BY 4.0 terms; MIT covers the viewer code only.
 
 552 unit tests on Node's built-in runner cover the data and caching layers, the file import, the
 geometry code behind the error figures above, and the core library, run headless under a stub
