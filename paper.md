@@ -73,7 +73,7 @@ usable 3D geometry. This viewer therefore ships its own: three published eye mod
 per-structure names and provenance, in a second camera-linked pane. A multi-toggle layer panel would
 have been a fair contribution to itk-vtk-viewer, whose geometry panel selects one mesh at a time.
 The second pane would not: itk-vtk-viewer and the Open Anatomy Browser each build one model scene —
-one `vtkProxyManager`, and one `THREE.Scene` beside an orientation-axes inset — so a second
+one `vtkProxyManager`, and one model `THREE.Scene` beside an axes-only inset scene — so a second
 populated scene changes a central assumption instead of extending it. Neuroglancer already links
 cameras across layer-group panes, but its mesh-file readers take OBJ, ASCII VTK and its own
 precomputed format, not the glTF or STL this viewer loads. Hence a small library over three.js
