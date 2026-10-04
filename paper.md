@@ -69,7 +69,7 @@ What none supplies is the other half of the comparison. None of the Open Anatomy
 and of six related open projects we surveyed (ISETBio [@cottaris2019isetbio], OpenRetina
 [@dagostino2026openretina], V-Cornea [@vanin2025vcornea; @vanin2025vcorneacode], OpenEyeSim
 [@priamikov2016openeyesim], `pulse2percept` [@beyeler2017pulse2percept] and Open Source Brain
-[@gleeson2019osb]) none ships usable 3D geometry. This viewer therefore ships its own: three
+[@gleeson2019osb]) none ships usable 3D eye geometry. This viewer therefore ships its own: three
 published eye models with per-structure names and provenance, in a second camera-linked pane. A
 multi-toggle layer panel would have been a fair contribution to itk-vtk-viewer, whose geometry panel
 selects one mesh at a time. The second pane would not: itk-vtk-viewer and the Open Anatomy Browser
@@ -99,7 +99,7 @@ written back into the address bar, which makes a view shareable as a link; a dro
 the files it names live on one machine.
 
 Decimation answers a client cost, not a hosting one: the viewer does load a 1 GB, 21 M-triangle STL,
-but reading and parsing it took about 12 s and 4.6 GB of memory, where the decimated copy loads in
+but reading and parsing it took about 12 s and 2.4 GB of memory, where the decimated copy loads in
 under a second. A documented pipeline built on glTF Transform [@gltftransform] converts binary STL
 to glTF, welds it into an indexed mesh, decimates it with the `meshoptimizer` simplifier
 [@meshoptimizer] and compresses it with Draco [@draco]; layers stream on toggle into the Cache

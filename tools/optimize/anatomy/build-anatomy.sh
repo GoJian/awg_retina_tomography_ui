@@ -14,8 +14,9 @@
 # Requires: python3 with the packages in requirements.txt beside this script
 # (`python3 -m pip install -r requirements.txt`; on Linux gmsh also needs the
 # GL/X11 libraries listed in ../README.md), git, and the gltf-transform CLI
-# pinned at 4.0.0 as for optimize.sh (`npm i -g @gltf-transform/cli@4.0.0`;
-# its @gltf-transform/core dependency floats within ^4).
+# pinned at 4.0.0 (`npm i -g @gltf-transform/cli@4.0.0`; only `draco` is used
+# here, and 4.0.0 rebuilds upat-oculomotor.glb identically apart from the
+# generator string).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"

@@ -29,7 +29,7 @@ run, so it holds only `upat`; a full rebuild overwrites it with all three.
 This audit covers nine entries from eight upstream projects: the three loadable
 models below — two of them, `mesheye` and `humaneye`, from the single
 feelpp/mesh.eye repository — and six further projects that were surveyed and
-ship no 3D eye geometry.
+ship no usable 3D eye geometry.
 
 | id | File | Structures | Size | Licence |
 |----|------|-----------:|-----:|---------|
@@ -141,7 +141,7 @@ proper rotation, so it stays a right eye) to match the others.
 
 These were considered for the reference pane and rejected; this table is the
 record of that check. They are not offered in the model menu, which lists only
-what the pane can load. None ships 3D anatomical geometry:
+what the pane can load. None ships usable 3D eye geometry:
 
 | Project | Why not | How that was checked |
 |---------|---------|----------------------|
