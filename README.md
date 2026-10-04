@@ -24,7 +24,7 @@ data, which is what the segmentation looks like and how its coats sit relative
 to a whole eye.
 
 This viewer answers that question in a browser tab, with nothing installed: a
-first visit transfers a 212 KB app shell, served gzipped at 68 KB, and loading
+first visit transfers a 213 KB app shell, served gzipped at 69 KB, and loading
 the default reference eye adds 343 KB. It is built for three
 audiences: the GeneLab AWG space-biology researchers who produced the scans and
 want to check or show them; ophthalmology and anatomy teaching, where the
@@ -64,9 +64,9 @@ quantifies exactly how much accuracy that costs.
   [Loading your own data](#loading-your-own-data).
 - **Fast by default** — heavy source scans (≈1 GB STL meshes) are decimated and
   Draco-compressed to a few hundred KB each and shipped with the app. A first
-  visit downloads the app shell, 212 KB raw and 68 KB over the wire gzipped;
+  visit downloads the app shell, 213 KB raw and 69 KB over the wire gzipped;
   clicking **Load model** adds the 343 KB default reference eye, 412 KB over the
-  wire in all (555 KB raw) instead of over 1 GB, rising to 3.2 MB only if every
+  wire in all (556 KB raw) instead of over 1 GB, rising to 3.2 MB only if every
   layer is toggled on. The first-party numbers come from `tools/bench`; see
   [Benchmarks](#benchmarks). On top of them a cold visit also fetches about
   670 KB from the third-party hosts listed under
@@ -199,7 +199,8 @@ Draco GLBs — so the viewer runs without reaching Hugging Face:
 http://127.0.0.1:8123/?dataset=local/F10/F10_layers.csv&demo=off
 ```
 
-That is the dataset the Playwright suite pins itself to. It removes one host,
+That is the dataset the Playwright suite pins itself to (one test instead loads
+`test/e2e/fixtures/xss-manifest.csv`, also same-origin). It removes one host,
 not all four: Three.js, the Draco decoder and the webfonts still come from their
 CDNs, so this is independence from the dataset, not an offline run. A genuinely
 air-gapped deployment means vendoring `three` into the import map, self-hosting
@@ -324,7 +325,7 @@ and column order does not matter:
 | `file_name` | yes | Identifies the structure within its sample — the structure id is `<sample>__<file_name>` — and is the label when `seg_mesh_label` is absent. |
 | `seg_mesh_link` | yes | Where the mesh is downloaded from. The extension picks the parser: `.glb` / `.gltf` are read as glTF, anything else as binary STL. For a manifest imported with its meshes, a bare file name matches a supplied file. |
 | `seg_mesh_label` | no | Display label; falls back to `file_name` when missing or empty. |
-| `sample_link` | no | Provenance link, shown as the ↗ beside the sample. Defaults to empty. |
+| `sample_link` | no | Provenance link, shown as the ↗ beside the sample. Only an http(s) link (absolute, or relative to the page) is shown; any other scheme, such as `javascript:` or `data:`, is ignored. Defaults to empty. |
 | `notes` | no | Free text carried onto the structure record (parsed, but not displayed today). Defaults to empty. |
 
 A row missing any of the three required values is skipped silently, so a
@@ -658,14 +659,15 @@ plus a static scan proving no core module reaches for a browser global, and
 the `app/ui/` view modules rendered into a small fake DOM over a headless
 workbench, and the file-import path (the manifest parser on text, samples built
 from picked files, the local-file `io`, the Import dialog and drop targets)
-(549 tests, Node's built-in runner; `three` is the only devDependency the unit
+(552 tests, Node's built-in runner; `three` is the only devDependency the unit
 tests need — `@playwright/test` serves the browser suite alone).
 `npm run test:e2e` drives the actual application in Chromium — Playwright
 starts `tools/dev-serve.py` on port 8124 itself, so python3 must be on PATH —
 and checks that WebGL starts, that a toggled layer reaches the GPU, that the
 asset cache fills, that files picked from disk and a manifest URL typed into
-the dialog both reach the scene, that markup in a manifest's names or a file
-name is shown as text and never run, and that the controls behave (21 tests).
+the dialog both reach the scene, that markup in a manifest's names, a file name
+or an `?anatomy=` file's load error is shown as text and never run, and that the
+controls behave (22 tests).
 Both run in CI on every pull request and on pushes to `main`, along with a
 decode of every shipped asset.
 
@@ -693,8 +695,8 @@ Measured on the shipped assets:
 | `eye.stl` | 21,141,576 | 1008 MB | 633 KB | 1631x | 0.017% | +0.63% |
 | `feature.stl` | 3,131,220 | 149 MB | 325 KB | 471x | 0.006% | +0.21% |
 
-First visit: a 212 KB app shell (68 KB gzipped) and nothing else from this
-repository. Load model: the shell plus the 343 KB default anatomy = 555 KB raw,
+First visit: a 213 KB app shell (69 KB gzipped) and nothing else from this
+repository. Load model: the shell plus the 343 KB default anatomy = 556 KB raw,
 412 KB over the wire. Toggling on every segmented layer brings the total to
 3.2 MB.
 

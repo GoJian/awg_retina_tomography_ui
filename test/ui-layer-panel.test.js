@@ -561,7 +561,7 @@ describe('untrusted text', () => {
     assert.deepEqual(parsedPayload(), []);
   });
 
-  test('only an http(s) sample_link becomes the source anchor', () => {
+  test('only an http(s) sample_link becomes the source anchor; an unparseable one is dropped', () => {
     const links = {
       'https://example.test/data': 'https://example.test/data',
       'HTTP://Example.test/x': 'http://example.test/x',
@@ -570,7 +570,7 @@ describe('untrusted text', () => {
       'java\tscript:alert(1)': null,
       'data:text/html,<script>alert(1)</script>': null,
       'vbscript:msgbox(1)': null,
-      'not a url': null,
+      'http://[unclosed': null,
     };
     const ids = Object.keys(links).map((_, i) => `s${i}`);
     const samples = Object.keys(links).map((link, i) => sample(ids[i], [structure(`x${i}`, ids[i])], { link }));

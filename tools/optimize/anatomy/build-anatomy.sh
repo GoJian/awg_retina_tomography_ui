@@ -14,8 +14,8 @@
 # Requires: python3 with the packages in requirements.txt beside this script
 # (`python3 -m pip install -r requirements.txt`; on Linux gmsh also needs the
 # GL/X11 libraries listed in ../README.md), git, and the gltf-transform CLI
-# pinned to the version the shipped assets were built with
-# (`npm i -g @gltf-transform/cli@4.0.0`).
+# pinned at 4.0.0 as for optimize.sh (`npm i -g @gltf-transform/cli@4.0.0`;
+# its @gltf-transform/core dependency floats within ^4).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"

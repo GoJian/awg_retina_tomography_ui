@@ -43,8 +43,9 @@ CI runs both suites plus an asset decode on every pull request.
 
 The suites leave five things uncovered, on purpose — the first four are what
 makes the browser tests fast and offline. Playwright runs Chromium only; it pins
-`?dataset=` to the checked-in `local/F10/F10_layers.csv`, so the live Hugging
-Face manifest is never fetched; the Draco decoder is a browser-only download, so
+`?dataset=` to checked-in, same-origin manifests (`local/F10/F10_layers.csv`,
+and `test/e2e/fixtures/xss-manifest.csv` for the untrusted-text test), so the
+live Hugging Face manifest is never fetched; the Draco decoder is a browser-only download, so
 no test decodes a compressed asset; and nothing asserts anything about rendered
 pixels, so a clip cap that comes out hollow or translucent shells drawn in the
 wrong order would leave the suite green.

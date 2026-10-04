@@ -3,8 +3,8 @@
 //  real browser can show that WebGL initialises, that a decimated mesh actually
 //  reaches the GPU, and that the panes and controls stay wired together.
 //
-//  The manifest is pinned to the checked-in F10 dataset (?dataset=…) so these
-//  never depend on Hugging Face being reachable. `?demo=off` suppresses the
+//  The manifest is pinned to the checked-in F10 dataset (?dataset=…), or to a
+//  same-origin fixture, so these never depend on Hugging Face being reachable. `?demo=off` suppresses the
 //  synthetic second sample so counts are predictable.
 // ============================================================================
 
@@ -337,6 +337,20 @@ test.describe('untrusted text', () => {
     // they are shown, and no handler fired (an <img> error fires within
     // milliseconds of insertion, so a short settle is enough to catch one).
     await expect(page.locator('#layer-tree img, #layer-tree b, #study-menu img')).toHaveCount(0);
+    await page.waitForTimeout(1000);
+    expect(dialogs).toEqual([]);
+  });
+
+  test('an ?anatomy= file whose load error quotes markup shows it as text and runs nothing', async ({ page }) => {
+    // three's GLTFLoader puts the fixture's buffers[0].type, an <img onerror>
+    // payload, into the error it throws, and the left pane's card shows it.
+    const dialogs = [];
+    page.on('dialog', (d) => { dialogs.push(d.message()); d.dismiss(); });
+    await page.goto(`${APP}&anatomy=test/e2e/fixtures/xss-anatomy.gltf`);
+    await page.locator('#overlay-load').click();
+    const sub = page.locator('#glb-overlay .overlay-sub');
+    await expect(sub).toContainText("<img src=x onerror=alert('anatomy')>", { timeout: 30_000 });
+    await expect(page.locator('#glb-overlay img')).toHaveCount(0);
     await page.waitForTimeout(1000);
     expect(dialogs).toEqual([]);
   });

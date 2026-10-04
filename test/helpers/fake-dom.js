@@ -174,6 +174,8 @@ export class FakeDocument {
     this.listeners = new Map();
     this.raf = [];
     this.htmlWrites = [];
+    // As in a browser, relative URLs resolve against the page.
+    this.baseURI = 'https://viewer.test/index.html';
   }
   createElement(tag) { return new FakeElement(tag); }
   createDocumentFragment() { return new FakeElement('#fragment'); }

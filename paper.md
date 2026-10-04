@@ -61,9 +61,9 @@ are desktop installs, and Slicer's user guide advises "10x more memory than the 
 you load" [@slicerdocs]. In the browser, NiiVue [@niivue; @eckstein2026niivue], Neuroglancer
 [@neuroglancer] and itk-vtk-viewer [@itkvtkviewer] render meshes client-side, and all three already
 bind a dataset at run time as this viewer does: NiiVue's web app and itk-vtk-viewer take mesh URLs
-as `?images=` and `?fileToLoad=`, and a Neuroglancer scene is a pasteable link. The Open Anatomy
-Browser [@halle2017oabrowser] is closest, being zero-install, manifest-described, named and static.
-We claim novelty in none of this.
+as `?images=` and `?fileToLoad=` respectively, and a Neuroglancer scene is a pasteable link. The
+Open Anatomy Browser [@halle2017oabrowser] is closest, being zero-install, manifest-described, named
+and static. We claim novelty in none of this.
 
 What none supplies is the other half of the comparison. None of the Open Anatomy atlases is ocular,
 and of six open eye-modelling projects we surveyed (ISETBio [@cottaris2019isetbio], OpenRetina
@@ -74,10 +74,9 @@ per-structure names and provenance, in a second camera-linked pane. A multi-togg
 have been a fair contribution to itk-vtk-viewer, whose geometry panel selects one mesh at a time.
 The second pane would not: itk-vtk-viewer and the Open Anatomy Browser each build one model scene —
 one `vtkProxyManager`, and one model `THREE.Scene` beside an axes-only inset scene — so a second
-populated scene changes a central assumption instead of extending it. Neuroglancer already links
-cameras across layer-group panes, but its mesh-file readers take OBJ, ASCII VTK and its own
-precomputed format, not the glTF or STL this viewer loads. Hence a small library over three.js
-[@threejs], not a fork.
+populated scene changes a central assumption instead of extending it. Neuroglancer and NiiVue
+already link cameras across panes, but neither reads glTF, the format of this viewer's bundled
+meshes. Hence a small library over three.js [@threejs], not a fork.
 
 # Software design
 
@@ -116,8 +115,9 @@ Discarding 98.5% of `eye.stl`'s triangles moves the surface by 0.017% of the dia
 the worst-case (Hausdorff) distances, 3.99% and 1.10%, fall almost entirely in the
 original-to-decimated direction, consistent with fragments removed rather than the principal surface
 displaced. The result is an instrument for orientation and triage, not morphometry. A first visit
-transfers a 212 KB shell, served gzipped at 68 KB; loading the default reference eye adds 343 KB,
-against 1.13 GB of source meshes, with `three` and the Draco decoder fetched from CDNs on top.
+transfers a 213 KB shell, served gzipped at 69 KB; loading the default reference eye adds 343 KB,
+against 1.13 GB of source meshes, with `three`, the webfonts and the Draco decoder fetched from CDNs
+on top.
 
 The left pane holds third-party published anatomy, not NASA data: `feelpp/mesh.eye`
 [@chabannes2024mesheye; @sala2024ovs], the SolidWorks CAD eye it derives from, and the Upatras
@@ -144,9 +144,9 @@ that distribute usable 3D eye geometry [@chabannes2024mesheye; @sala2024ovs; @fi
 a recorded check for the six that do not. That geometry is other groups' published work, carried
 under its own GPL-3.0 and CC BY 4.0 terms; MIT covers the viewer code only.
 
-549 unit tests on Node's built-in runner cover the data and caching layers, the file import, the
+552 unit tests on Node's built-in runner cover the data and caching layers, the file import, the
 geometry code behind the error figures above, and the core library, run headless under a stub
-renderer with the real orbit controls on synthetic STL and uncompressed glTF. 21 Playwright tests
+renderer with the real orbit controls on synthetic STL and uncompressed glTF. 22 Playwright tests
 drive the real application in Chromium, including a file import from disk and a manifest loaded by
 URL. CI runs both suites and decodes every shipped asset, so a corrupt mesh fails the build.
 
