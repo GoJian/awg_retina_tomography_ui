@@ -18,6 +18,7 @@ import { HEAVY_BYTES } from '../core/layers.js';
 import { binarySTL, stubIo } from './helpers/fixtures.js';
 import { installFakeDom, tick, waitFor } from './helpers/fake-dom.js';
 import { createLayerPanel } from '../app/ui/layer-panel.js';
+import { labelFromFileName } from '../data-loader.js';
 
 let dom;
 beforeEach(() => { dom = installFakeDom(); });
@@ -65,7 +66,8 @@ describe('build', () => {
 
     const headRow = groups[0].querySelector('.sample-head-row');
     assert.equal(headRow.querySelector('.sample-head').className, 'sample-head open');
-    assert.match(headRow.querySelector('.sample-head').innerHTML, /S1/);
+    assert.equal(headRow.querySelector('.sample-head .caret').textContent, '▸');
+    assert.equal(headRow.querySelector('.sample-head .sample-name').textContent, 'S1');
     assert.equal(headRow.querySelector('.sample-vis').checked, true);
     assert.ok(headRow.querySelector('.sample-gear'));
     assert.equal(headRow.querySelector('.sample-src').href, 'https://example.test/s1');
@@ -86,7 +88,8 @@ describe('build', () => {
     assert.equal(row.querySelector('.layer-swatch').style.background, '#00ff00');
     assert.equal(row.querySelector('.layer-color-input').value, '#00ff00');
     assert.equal(row.querySelector('.layer-label').htmlFor, 'chk-b');
-    assert.match(row.querySelector('.layer-label').innerHTML, new RegExp(`<span class="layer-name">${b.label}</span>`));
+    assert.equal(row.querySelector('.layer-label .layer-name').textContent, b.label);
+    assert.equal(row.querySelector('.layer-label .layer-size').textContent, '');
     const op = row.querySelector('.layer-opacity');
     assert.equal(op.value, '50');
     assert.equal(op.style['--fill'], '50%');
@@ -138,8 +141,11 @@ describe('build', () => {
     const { panel, samples, tree } = makePanel();
     panel.build(samples);
     panel.showError('HTTP 404');
-    assert.equal(tree.children.length, 0);
-    assert.equal(tree.innerHTML, '<div class="tree-error">Could not load the dataset manifest.<br>HTTP 404</div>');
+    assert.equal(tree.children.length, 1);
+    const box = tree.children[0];
+    assert.equal(box.className, 'tree-error');
+    assert.deepEqual(box.children.map((c) => c.tagName), ['#TEXT', 'BR', '#TEXT']);
+    assert.equal(box.deepText, 'Could not load the dataset manifest. HTTP 404');
   });
 });
 
@@ -283,7 +289,6 @@ describe('checkbox', () => {
       await p;
       assert.equal(load.mock.callCount(), 1);
       assert.equal(a._resolved, true);
-      // The size span is part of the label's innerHTML (opaque to the fake DOM).
       assert.equal(row.querySelector('.layer-label').querySelector('.layer-size').textContent, '2.00 KB');
     } finally {
       globalThis.fetch = saved;
@@ -327,8 +332,8 @@ describe('checkbox', () => {
     let p = cb.dispatch('change')[0];
     await tick();
     assert.ok(modal(), 'confirm shown');
-    assert.match(modal().innerHTML, /“A” is 400 MB\. It will download once/);
-    assert.match(modal().innerHTML, /data-act="ok">Download</);
+    assert.match(modal().querySelector('.modal-msg').textContent, /^“A” is 400 MB\. It will download once/);
+    assert.equal(modal().querySelector('[data-act="ok"]').textContent, 'Download');
     modal().dispatch('click', { target: { dataset: { act: 'cancel' } } });
     await p;
     assert.equal(cb.checked, false);
@@ -502,5 +507,87 @@ describe('activate / imported', () => {
     await waitFor(() => group.querySelector('.layer-row').dataset.state === 'loaded');
     assert.equal(labels[0], 'Reading file…');
     assert.equal(labels[labels.length - 1], 'Loaded · local file');
+  });
+});
+
+// ---------------------------------------------------------------------------
+//  Untrusted text — a ?dataset= manifest is anyone's file, and an imported
+//  file can be named anything: none of it may reach the HTML parser.
+// ---------------------------------------------------------------------------
+describe('untrusted text', () => {
+  const PAYLOAD = '<img src=x onerror=alert(1)>';
+  const parsedPayload = () => dom.doc.htmlWrites.filter((h) => h.includes('<img') || h.includes('onerror'));
+
+  test('sample names and layer labels are set as text', () => {
+    const s = structure('x', 'evil', { label: PAYLOAD });
+    const { panel, tree } = makePanel({ samplesOver: [sample('evil', [s], { label: PAYLOAD })] });
+    panel.build([sample('evil', [s], { label: PAYLOAD })]);
+    assert.equal(tree.querySelector('.sample-name').textContent, PAYLOAD);
+    assert.equal(tree.querySelector('.layer-name').textContent, PAYLOAD);
+    assert.deepEqual(parsedPayload(), []);
+  });
+
+  test('an imported file name is shown as its literal text', () => {
+    const label = labelFromFileName(`${PAYLOAD}.glb`);
+    assert.equal(label, PAYLOAD);
+    const s = structure('f', 'imp', { label, local: true });
+    const { panel, rowOf } = makePanel({ samplesOver: [sample('imp', [s], { label: 'Imported', imported: true })] });
+    panel.build([sample('imp', [s], { label: 'Imported', imported: true })]);
+    assert.equal(rowOf('f').querySelector('.layer-name').textContent, PAYLOAD);
+    assert.deepEqual(parsedPayload(), []);
+  });
+
+  test('the heavy-download confirm quotes the label as text', async () => {
+    const { wb, panel, samples, checkOf, a } = makePanel();
+    a.label = PAYLOAD;
+    a.bytes = HEAVY_BYTES + 1;
+    mock.method(wb.layers, 'load');
+    panel.build(samples);
+    const cb = checkOf('a');
+    cb.checked = true;
+    const p = cb.dispatch('change')[0];
+    await tick();
+    const modal = dom.doc.body.querySelectorAll('.modal-back')[0];
+    assert.match(modal.querySelector('.modal-msg').textContent, new RegExp(`^“${PAYLOAD.replace(/[()]/g, '\\$&')}” is 400 MB`));
+    assert.deepEqual(parsedPayload(), []);
+    modal.dispatch('click', { target: { dataset: { act: 'cancel' } } });
+    await p;
+  });
+
+  test('a manifest error message is set as text', () => {
+    const { panel, tree } = makePanel();
+    panel.showError(PAYLOAD);
+    assert.equal(tree.children[0].children[2].textContent, PAYLOAD);
+    assert.deepEqual(parsedPayload(), []);
+  });
+
+  test('only an http(s) sample_link becomes the source anchor; an unparseable one is dropped', () => {
+    const links = {
+      'https://example.test/data': 'https://example.test/data',
+      'HTTP://Example.test/x': 'http://example.test/x',
+      "javascript:alert('link')": null,
+      " JaVaScRiPt:alert(1)": null,
+      'java\tscript:alert(1)': null,
+      'data:text/html,<script>alert(1)</script>': null,
+      'vbscript:msgbox(1)': null,
+      'http://[unclosed': null,
+    };
+    const ids = Object.keys(links).map((_, i) => `s${i}`);
+    const samples = Object.keys(links).map((link, i) => sample(ids[i], [structure(`x${i}`, ids[i])], { link }));
+    const { panel, tree } = makePanel({ samplesOver: samples });
+    panel.build(samples);
+    Object.values(links).forEach((want, i) => {
+      const a = tree.children[i].querySelector('.sample-head-row').querySelector('.sample-src');
+      if (want === null) assert.equal(a, null, `no anchor for ${Object.keys(links)[i]}`);
+      else assert.equal(a.href, want);
+    });
+  });
+
+  test('a relative sample_link resolves against the page and is kept when http(s)', () => {
+    dom.doc.baseURI = 'https://viewer.example/app/index.html';
+    const s = sample('rel', [structure('r', 'rel')], { link: 'docs/sample.html' });
+    const { panel, tree } = makePanel({ samplesOver: [s] });
+    panel.build([s]);
+    assert.equal(tree.querySelector('.sample-src').href, 'https://viewer.example/app/docs/sample.html');
   });
 });

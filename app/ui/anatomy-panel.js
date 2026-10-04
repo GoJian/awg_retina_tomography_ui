@@ -81,32 +81,61 @@ export function createAnatomyPanel(wb, io) {
     glbOverlay.classList.remove('hidden');
     if (state === 'idle') {
       const cached = await io.isCached(wb.anatomy.url());
-      glbOverlay.innerHTML = `
-        <div class="overlay-card">
-          <span class="ms overlay-icon">visibility</span>
-          <div class="overlay-title">${wb.anatomy.model().label}</div>
-          <div class="overlay-sub">${wb.anatomy.model().blurb}${cached ? ' · cached' : ''}</div>
-          <button class="btn btn-primary" id="overlay-load">Load model</button>
-        </div>`;
-      glbOverlay.querySelector('#overlay-load').onclick = () => wb.anatomy.load();
+      const load = showCard({
+        icon: 'visibility',
+        title: wb.anatomy.model().label,
+        sub: `${wb.anatomy.model().blurb}${cached ? ' · cached' : ''}`,
+        button: { id: 'overlay-load', className: 'btn btn-primary', label: 'Load model' },
+      });
+      load.onclick = () => wb.anatomy.load();
     } else if (state === 'loading') {
-      glbOverlay.innerHTML = `
-        <div class="overlay-card">
-          <div class="overlay-title">Loading eye anatomy</div>
-          <div class="progress"><div class="progress-fill" style="width:${data.pct || 0}%"></div></div>
-          <div class="overlay-sub">${data.label || ''}</div>
-          <button class="btn btn-ghost" id="overlay-cancel">Cancel</button>
-        </div>`;
-      glbOverlay.querySelector('#overlay-cancel').onclick = () => wb.anatomy.cancel();
+      const cancel = showCard({
+        title: 'Loading eye anatomy',
+        pct: data.pct || 0,
+        sub: data.label || '',
+        button: { id: 'overlay-cancel', className: 'btn btn-ghost', label: 'Cancel' },
+      });
+      cancel.onclick = () => wb.anatomy.cancel();
     } else if (state === 'error') {
-      glbOverlay.innerHTML = `
-        <div class="overlay-card">
-          <div class="overlay-title">Couldn't load model</div>
-          <div class="overlay-sub">${data.message || ''}</div>
-          <button class="btn btn-primary" id="overlay-retry">Try again</button>
-        </div>`;
-      glbOverlay.querySelector('#overlay-retry').onclick = () => wb.anatomy.load();
+      const retry = showCard({
+        title: "Couldn't load model",
+        sub: data.message || '',
+        button: { id: 'overlay-retry', className: 'btn btn-primary', label: 'Try again' },
+      });
+      retry.onclick = () => wb.anatomy.load();
     }
+  }
+
+  // Replace the overlay with one card, built node by node with every string set
+  // as text: an error message can quote the fetched file (a ?anatomy= URL is
+  // anyone's, and three's loaders put glTF values into their errors). Returns
+  // the card's button.
+  function showCard({ icon, title, pct, sub, button }) {
+    const card = document.createElement('div');
+    card.className = 'overlay-card';
+    if (icon) card.appendChild(textEl('span', 'ms overlay-icon', icon));
+    card.appendChild(textEl('div', 'overlay-title', title));
+    if (pct !== undefined) {
+      const bar = document.createElement('div');
+      bar.className = 'progress';
+      const fill = document.createElement('div');
+      fill.className = 'progress-fill'; fill.style.width = `${Number(pct) || 0}%`;
+      bar.appendChild(fill);
+      card.appendChild(bar);
+    }
+    card.appendChild(textEl('div', 'overlay-sub', sub));
+    const btn = textEl('button', button.className, button.label);
+    btn.id = button.id;
+    card.appendChild(btn);
+    glbOverlay.innerHTML = '';
+    glbOverlay.appendChild(card);
+    return btn;
+  }
+
+  function textEl(tag, className, text) {
+    const el = document.createElement(tag);
+    el.className = className; el.textContent = text;
+    return el;
   }
 
   // -------------------------------------------------------------------------

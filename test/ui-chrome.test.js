@@ -110,9 +110,23 @@ describe('askConfirm', () => {
     askConfirm({ title: 'Large layer', message: 'Continue?', confirmLabel: 'Download' });
     const modal = back();
     assert.ok(modal, 'modal-back appended to body');
-    assert.match(modal.innerHTML, /<div class="modal-title">Large layer<\/div>/);
-    assert.match(modal.innerHTML, /<div class="modal-msg">Continue\?<\/div>/);
-    assert.match(modal.innerHTML, /data-act="ok">Download</);
+    const card = modal.querySelector('.modal');
+    assert.equal(card.getAttribute('role'), 'dialog');
+    assert.equal(card.getAttribute('aria-modal'), 'true');
+    assert.equal(modal.querySelector('.modal-title').textContent, 'Large layer');
+    assert.equal(modal.querySelector('.modal-msg').textContent, 'Continue?');
+    assert.equal(modal.querySelector('[data-act="ok"]').textContent, 'Download');
+    assert.equal(modal.querySelector('[data-act="cancel"]').textContent, 'Cancel');
+  });
+
+  test('sets the title, message and label as text, never as HTML', () => {
+    const payload = '<img src=x onerror=alert(1)>';
+    askConfirm({ title: payload, message: `“${payload}” is 400 MB.`, confirmLabel: payload });
+    const modal = back();
+    assert.equal(modal.querySelector('.modal-title').textContent, payload);
+    assert.equal(modal.querySelector('.modal-msg').textContent, `“${payload}” is 400 MB.`);
+    assert.equal(modal.querySelector('[data-act="ok"]').textContent, payload);
+    assert.deepEqual(dom.doc.htmlWrites.filter((h) => h.includes('<img')), [], 'no string reached innerHTML');
   });
 
   test('resolves true on OK, false on Cancel or a backdrop click, removing the modal each time', async () => {
@@ -141,7 +155,7 @@ describe('askConfirm', () => {
 
   test('the default confirm label is OK', () => {
     askConfirm({ title: 't', message: 'm' });
-    assert.match(back().innerHTML, /data-act="ok">OK</);
+    assert.equal(back().querySelector('[data-act="ok"]').textContent, 'OK');
   });
 });
 
@@ -318,15 +332,25 @@ describe('study selector', () => {
     assert.equal(items.length, 2);
     assert.equal(items[0].className, 'study-item');
     assert.equal(items[0].getAttribute('role'), 'menuitem');
-    assert.match(items[0].innerHTML, /folder_open/);
-    assert.match(items[0].innerHTML, /Mouse f10/);
-    assert.match(items[0].innerHTML, /1 layer</);
-    assert.match(items[1].innerHTML, /content_copy/, 'a demo sample gets the copy icon');
+    assert.equal(items[0].querySelector('.ms').textContent, 'folder_open');
+    assert.equal(items[0].querySelector('.study-item-name').textContent, 'Mouse f10');
+    assert.equal(items[0].querySelector('.study-item-meta').textContent, '1 layer');
+    assert.equal(items[1].querySelector('.ms').textContent, 'content_copy', 'a demo sample gets the copy icon');
     buildStudyMenu(wb, samples.slice(0, 1));
     assert.equal(dom.doc.el('#study-menu').children.length, 1, 'rebuilt from scratch');
     buildStudyMenu(wb, [{ id: 'imp', label: 'Imported', imported: true, structures: [] }]);
-    assert.match(dom.doc.el('#study-menu').children[0].innerHTML, /upload_file/, 'an imported sample gets the upload icon');
-    assert.match(dom.doc.el('#study-menu').children[0].innerHTML, /0 layers</);
+    const imported = dom.doc.el('#study-menu').children[0];
+    assert.equal(imported.querySelector('.ms').textContent, 'upload_file', 'an imported sample gets the upload icon');
+    assert.equal(imported.querySelector('.study-item-meta').textContent, '0 layers');
+  });
+
+  test('a sample name from a manifest is shown as text, never parsed as HTML', () => {
+    const { wb } = makeWb();
+    const payload = '<img src=x onerror=alert(1)>';
+    buildStudyMenu(wb, [{ id: 'x', label: payload, structures: [] }]);
+    const item = dom.doc.el('#study-menu').children[0];
+    assert.equal(item.querySelector('.study-item-name').textContent, payload);
+    assert.deepEqual(dom.doc.htmlWrites.filter((h) => h.includes('<img')), []);
   });
 
   test('clicking an item focuses that sample and closes the menu', () => {
@@ -347,7 +371,7 @@ describe('study selector', () => {
   test('focusSample updates the label, frames the sample and scrolls its rail group into view', () => {
     const { wb } = makeWb();
     const focus = mock.method(wb.layers, 'focusSample');
-    const group = new FakeElement('div'); group.dataset.sampleId = 's1';
+    const group = new FakeElement('div'); group.className = 'sample'; group.dataset.sampleId = 's1';
     dom.doc.el('#layer-tree').appendChild(group);
     focusSample(wb, 's1');
     assert.equal(dom.doc.el('#study-label').textContent, 'MOUSE F10 · µCT · SEG');
@@ -357,6 +381,16 @@ describe('study selector', () => {
     focusSample(wb, 'nope');
     assert.equal(dom.doc.el('#study-label').textContent, 'MOUSE F10 · µCT · SEG');
     assert.deepEqual(focus.mock.calls[1].arguments, ['nope']);
+  });
+
+  test('focusSample finds a rail group whose id would not survive a CSS selector', () => {
+    const { wb } = makeWb();
+    mock.method(wb.layers, 'focusSample');
+    const id = 'a"] b[x';
+    const group = new FakeElement('div'); group.className = 'sample'; group.dataset.sampleId = id;
+    dom.doc.el('#layer-tree').appendChild(group);
+    focusSample(wb, id);
+    assert.equal(group.scrolledInto, 1);
   });
 
   test('closeStudyMenu drops the open class', () => {

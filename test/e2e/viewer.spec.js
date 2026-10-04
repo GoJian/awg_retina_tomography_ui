@@ -3,11 +3,12 @@
 //  real browser can show that WebGL initialises, that a decimated mesh actually
 //  reaches the GPU, and that the panes and controls stay wired together.
 //
-//  The manifest is pinned to the checked-in F10 dataset (?dataset=…) so these
-//  never depend on Hugging Face being reachable. `?demo=off` suppresses the
+//  The manifest is pinned to the checked-in F10 dataset (?dataset=…), or to a
+//  same-origin fixture, so these never depend on Hugging Face being reachable. `?demo=off` suppresses the
 //  synthetic second sample so counts are predictable.
 // ============================================================================
 
+import fs from 'node:fs';
 import { test, expect } from '@playwright/test';
 
 const APP = '/index.html?dataset=local/F10/F10_layers.csv&demo=off';
@@ -220,7 +221,7 @@ test.describe('controls', () => {
     await expect.poll(() => triangleCount(page), { timeout: 20_000 }).toBeGreaterThan(1000);
   });
 
-  test('the help and about dialogs open and credit the model licences', async ({ page }) => {
+  test('the help and about dialogs open, credit the model licences and list both authors', async ({ page }) => {
     await page.goto(APP);
     await page.locator('#btn-help').click();
     await expect(page.locator('#help-dialog')).toBeVisible();
@@ -230,6 +231,10 @@ test.describe('controls', () => {
     await page.locator('#btn-about').click();
     await expect(page.locator('#about-dialog')).toBeVisible();
     await expect(page.locator('#about-dialog')).toContainText(/GPL|CC BY|licen[cs]e/i);
+    // Both authors, with the affiliations the paper gives.
+    await expect(page.locator('#about-dialog')).toContainText('Del Norte High School');
+    await expect(page.locator('#about-dialog')).toContainText('Jian Gong');
+    await expect(page.locator('#about-dialog')).toContainText('University of Wyoming');
   });
 });
 
@@ -297,5 +302,56 @@ test.describe('responsive', () => {
     await expect(page.locator('#pane-glb canvas')).toBeVisible();
     await expect(page.locator('#pane-stl canvas')).toBeVisible();
     await expect(page.locator('#layer-count')).toHaveText('5');
+  });
+});
+
+test.describe('untrusted text', () => {
+  // A ?dataset= link can point at anyone's manifest, and an imported file can
+  // be named anything, so both are hostile input. The fixture's sample name and
+  // layer labels are <img onerror> payloads and its sample_link is a
+  // javascript: URL; the imported file's name is another payload.
+  const SAMPLE = "<img src=x onerror=alert('sample')>";
+  const LAYER = "<img src=x onerror=alert('layer')>";
+  const FILE = "<img src=x onerror=alert('file')>";
+
+  test('manifest and file names render as literal text and run nothing', async ({ page }) => {
+    const dialogs = [];
+    page.on('dialog', (d) => { dialogs.push(d.message()); d.dismiss(); });
+    await page.goto('/index.html?dataset=test/e2e/fixtures/xss-manifest.csv&demo=off');
+    await expect(page.locator('#layer-count')).toHaveText('2');
+
+    const tree = page.locator('#layer-tree');
+    await expect(tree.locator('.sample-name')).toHaveText(SAMPLE);
+    await expect(tree.locator('.layer-name')).toHaveText([LAYER, '<b>RPE</b>']);
+    await expect(page.locator('#study-menu .study-item-name')).toHaveText(SAMPLE);
+    await expect(tree.locator('.sample-src'), 'a javascript: sample_link gets no anchor').toHaveCount(0);
+
+    await page.locator('#btn-import').click();
+    await page.locator('#import-files').setInputFiles({
+      name: `${FILE}.glb`, mimeType: 'model/gltf-binary', buffer: fs.readFileSync('local/F10/rpe.glb'),
+    });
+    await expect(page.locator('#layer-count')).toHaveText('3');
+    await expect(page.locator('.sample.is-imported .layer-name')).toHaveText(FILE);
+
+    // Nothing was parsed out of the strings: no <img>/<b> elements anywhere
+    // they are shown, and no handler fired (an <img> error fires within
+    // milliseconds of insertion, so a short settle is enough to catch one).
+    await expect(page.locator('#layer-tree img, #layer-tree b, #study-menu img')).toHaveCount(0);
+    await page.waitForTimeout(1000);
+    expect(dialogs).toEqual([]);
+  });
+
+  test('an ?anatomy= file whose load error quotes markup shows it as text and runs nothing', async ({ page }) => {
+    // three's GLTFLoader puts the fixture's buffers[0].type, an <img onerror>
+    // payload, into the error it throws, and the left pane's card shows it.
+    const dialogs = [];
+    page.on('dialog', (d) => { dialogs.push(d.message()); d.dismiss(); });
+    await page.goto(`${APP}&anatomy=test/e2e/fixtures/xss-anatomy.gltf`);
+    await page.locator('#overlay-load').click();
+    const sub = page.locator('#glb-overlay .overlay-sub');
+    await expect(sub).toContainText("<img src=x onerror=alert('anatomy')>", { timeout: 30_000 });
+    await expect(page.locator('#glb-overlay img')).toHaveCount(0);
+    await page.waitForTimeout(1000);
+    expect(dialogs).toEqual([]);
   });
 });

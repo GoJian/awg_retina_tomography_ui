@@ -29,7 +29,7 @@ run, so it holds only `upat`; a full rebuild overwrites it with all three.
 This audit covers nine entries from eight upstream projects: the three loadable
 models below — two of them, `mesheye` and `humaneye`, from the single
 feelpp/mesh.eye repository — and six further projects that were surveyed and
-ship no 3D eye geometry.
+ship no usable 3D eye geometry.
 
 | id | File | Structures | Size | Licence |
 |----|------|-----------:|-----:|---------|
@@ -141,14 +141,14 @@ proper rotation, so it stays a right eye) to match the others.
 
 These were considered for the reference pane and rejected; this table is the
 record of that check. They are not offered in the model menu, which lists only
-what the pane can load. None ships 3D anatomical geometry:
+what the pane can load. None ships usable 3D eye geometry:
 
 | Project | Why not | How that was checked |
 |---------|---------|----------------------|
 | ISETBio | MATLAB scene→retinal-image optics and cone-mosaic simulation. Its "geometry" is a 2D cone packing | Repo tree contains **zero** `.obj/.stl/.ply/.vtp/.glb/.gltf/.step/.stp/.off/.msh` files |
 | OpenRetina | Networks predicting retinal spike responses to stimuli; nothing spatial to draw | Model weights and stimulus/response tensors only |
 | V-Cornea | The published CompuCell3D lattice is **two-dimensional** — a 200 × 90 cross-section of epithelium, not a 3D cornea | Parsed `Epithelium.piff`: 12,085 cell boxes over 9 cell types (BASAL, LIMB, MEMB, STEM, STROMA, SUPER, TEAR, WALL, WING), `z1 = z2 = 0` on every one |
-| OpenEyeSim | Not publicly obtainable. Covers the same ground as the Upatras model, which is public | SimTK project page: *"IF YOU WANT TO GET IT NOW WRITE US AN EMAIL"* — no download files |
+| OpenEyeSim | Its eye is a plain sphere. Otherwise covers the same ground as the Upatras model | The SimTK project page offers no download (*"IF YOU WANT TO GET IT NOW WRITE US AN EMAIL"*), but the code is public in the authors' group's [Klimmasch/AEC](https://github.com/Klimmasch/AEC) (GPL-3.0): its only eye mesh, `eye_proper.obj`, is a 482-vertex sphere (`Sphere001`) |
 | pulse2percept | Models retinal **implants**, not eyes: its geometry is disc-electrode arrays (`DiskElectrode(r=250 µm, x, y, z)`) | Zero mesh files; electrodes are constructed in code. (Also won't install on Python 3.13 — it needs the removed `numpy.distutils`) |
 | Open Source Brain | NeuroML single-neuron morphologies — a ganglion cell, not ocular anatomy | Morphology files describe soma + dendrite segments |
 

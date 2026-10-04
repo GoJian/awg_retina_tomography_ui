@@ -16,7 +16,7 @@
 // front-faces innermost-out, which is what makes them blend in the right order.
 //
 // Only models that ship renderable geometry are registered. The open
-// eye-modelling projects that were surveyed and found to ship none are
+// projects that were surveyed and found to ship no usable eye geometry are
 // recorded, with the reason for each, in optimized/anatomy/README.md rather
 // than in this list, so the model menu offers nothing it cannot load.
 

@@ -80,8 +80,9 @@ async function inventory({ json }) {
   console.log('\n  ' + '-'.repeat(88));
   console.log(`  ${String(rows.length).padStart(2)} assets${fmtBytes(total).padStart(37)}${fmtNum(tris).padStart(12)}\n`);
 
-  // What a visitor actually pays for on a first visit: the app shell plus the
-  // default anatomy model. Segmented layers stream in only when toggled.
+  // What a visitor actually pays for. A first visit fetches only the app shell;
+  // the default anatomy model downloads when "Load model" is clicked, and the
+  // segmented layers stream in only when toggled.
   // The shell is resolved by walking index.html's actual module graph rather
   // than a hard-coded list — a list silently goes stale whenever a module moves,
   // and this figure is published in the paper.
@@ -93,9 +94,9 @@ async function inventory({ json }) {
   const shellGz = shellFiles.reduce((n, p) => n + zlib.gzipSync(fs.readFileSync(p), { level: 6 }).length, 0);
   const anatomy = rows.find((r) => r.file.endsWith('eye-anatomy.glb'));
   const an = anatomy?.bytes ?? 0;
-  console.log(`  First paint    app shell ${fmtBytes(shell)} raw / ${fmtBytes(shellGz)} gzipped`
-    + ` + default anatomy ${fmtBytes(an)}`);
-  console.log(`                 = ${fmtBytes(shell + an)} raw, ${fmtBytes(shellGz + an)} over the wire`);
+  console.log(`  First visit    app shell ${fmtBytes(shell)} raw / ${fmtBytes(shellGz)} gzipped`);
+  console.log(`  Load model     + default anatomy ${fmtBytes(an)}`
+    + ` = ${fmtBytes(shell + an)} raw, ${fmtBytes(shellGz + an)} over the wire`);
   console.log(`  Everything     ${fmtBytes(shell + total)} if every layer is toggled on\n`);
 }
 

@@ -6,6 +6,84 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- **Manifest, file-name and model-error text is no longer parsed as HTML.**
+  Sample names, layer labels and the manifest error reached `innerHTML`
+  unescaped in the layer rail, the study menu and the heavy-download confirm,
+  so a shared `?dataset=` link (or an imported file's name) could run script on
+  the app's origin through an `<img onerror>` payload. The reference-eye card
+  did the same with a load error, which three's GLTFLoader builds from values
+  in the fetched glTF, so a shared `?anatomy=` link could too, on **Load
+  model**. All of these are now set as text on elements built node by node
+  (`app/ui/layer-panel.js`, `app/ui/chrome.js`, `app/ui/anatomy-panel.js`).
+  A manifest's `sample_link` becomes the source link only when it resolves to
+  `http(s)`, so a `javascript:` or `data:` URL is dropped, and `focusSample`
+  no longer splices a sample id into a CSS selector.
+
+### Added
+
+- 12 unit tests and 2 browser tests for the fix above (552 and 22 in all). The
+  test fake DOM now logs every `innerHTML` write so a test can assert that
+  untrusted text never reached it, gives `document` a page `baseURI`, and its
+  `append()` takes strings as the DOM's does. The browser tests load
+  `test/e2e/fixtures/xss-manifest.csv`, a same-origin manifest whose names are
+  `<img onerror>` payloads, import a file named like one, and point
+  `?anatomy=` at `test/e2e/fixtures/xss-anatomy.gltf`, whose load error quotes
+  one.
+
+- `tools/optimize/anatomy/requirements.txt` — the Python packages the
+  reference-eye rebuild needs: `gmsh==4.15.2` and `trimesh==5.1.1` pinned,
+  plus `numpy`, `networkx`, `scipy` (trimesh's mesh processing fails without
+  it) and `pillow` (trimesh builds a placeholder texture for the Upatras OBJs,
+  which carry UV coordinates). The documented setup listed neither of the last
+  two.
+
+### Changed
+
+- `tools/optimize/README.md`, the README and `build-anatomy.sh` install from
+  `requirements.txt`. `tools/optimize/README.md` lists the Ubuntu packages the
+  `gmsh` wheel links against (`libglu1-mesa libgl1 libxft2 libxinerama1
+  libxcursor1 libgomp1`) and the other two point to it; `build-anatomy.sh`
+  names the pinned CLI.
+- The About dialog lists both authors, with the affiliations the paper gives.
+- The JOSS paper corrects claims an audit found false: a first visit fetches
+  only the app shell; the Open Anatomy Browser builds one model scene beside
+  an axes inset; NiiVue's web app also binds a dataset at run time
+  (`?images=`); and the gigabyte claim gives a measured load of a 1 GB, 21
+  M-triangle STL (about 12 s and 2.4 GB of memory, against under a second for
+  the decimated copy) instead of an absolute. It now says why Neuroglancer's
+  and NiiVue's linked panes were not extended (neither reads glTF), gives the
+  deployed URL, credits glTF Transform for the weld/simplify/Draco pipeline,
+  and cites the six surveyed projects (V-Cornea by both its paper and its
+  Zenodo software archive, as it asks) and the Hugging Face dataset at
+  revision `97a92d3` (nine new references, each DOI checked by the authors).
+  The survey is described as six related open projects, not six eye-modelling
+  ones, since Open Source Brain is a general model platform.
+  The AI disclosure now says, as the authors confirm, that the first viewer
+  (November 2025 to January 2026) was also written with Claude, not without
+  AI.
+- `optimized/anatomy/README.md` no longer calls OpenEyeSim unobtainable: its
+  code is public in `Klimmasch/AEC`, and its only eye mesh is a plain sphere.
+  The README and About dialog say the surveyed projects ship no *usable* 3D
+  eye geometry.
+- The optimize pipeline pins `@gltf-transform/cli@4.4.0` (README,
+  `optimize.sh` and `build-anatomy.sh`) instead of 4.0.0. Which CLI built the
+  shipped layers was not recorded; 4.4.0 is inferred, because the layers were
+  committed on 30 June 2026 when the setup said to install the CLI unpinned
+  and 4.4.0 was newest, and their GLBs name glTF-Transform v4.4.0 as their
+  writer. The 4.0.0 pin had no source, and 4.0.0 (meshoptimizer 0.20.0) and
+  4.4.0 (1.0.1) decimate the same test mesh differently. For the reference eye
+  models (`draco` only) CLIs 4.0.0, 4.4.0 and 4.4.2 all rebuild the Upatras
+  model identically apart from the generator string. The paper cites glTF
+  Transform 4.4.0 accordingly.
+- `tools/bench` reports `First visit` (the app shell alone) and `Load model`
+  (the shell plus the default anatomy) instead of a `First paint` line that
+  counted the anatomy, which a first visit does not download until **Load
+  model** is clicked. The README and `tools/bench/README.md` now say the same:
+  a 213 KB shell, served gzipped at 69 KB, with 343 KB more for the default
+  reference eye.
+
 ## [1.1.0] — 2026-10-03
 
 ### Added

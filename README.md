@@ -23,8 +23,9 @@ software — a steep price for the question most people actually bring to this
 data, which is what the segmentation looks like and how its coats sit relative
 to a whole eye.
 
-This viewer answers that question in a browser tab, with nothing installed and
-about 411 KB of first-party payload on a first visit. It is built for three
+This viewer answers that question in a browser tab, with nothing installed: a
+first visit transfers a 213 KB app shell, served gzipped at 69 KB, and loading
+the default reference eye adds 343 KB. It is built for three
 audiences: the GeneLab AWG space-biology researchers who produced the scans and
 want to check or show them; ophthalmology and anatomy teaching, where the
 segmented coats can be read against a published reference eye in the other pane;
@@ -62,17 +63,19 @@ quantifies exactly how much accuracy that costs.
   the same dialog or as `?dataset=`. See
   [Loading your own data](#loading-your-own-data).
 - **Fast by default** — heavy source scans (≈1 GB STL meshes) are decimated and
-  Draco-compressed to a few hundred KB each and shipped with the app, so a first
-  visit downloads about 411 KB of first-party payload over the wire — 553 KB
-  raw — instead of over 1 GB, rising to 3.2 MB only if every layer is toggled
-  on. The first-party numbers come from `tools/bench`; see
+  Draco-compressed to a few hundred KB each and shipped with the app. A first
+  visit downloads the app shell, 213 KB raw and 69 KB over the wire gzipped;
+  clicking **Load model** adds the 343 KB default reference eye, 412 KB over the
+  wire in all (556 KB raw) instead of over 1 GB, rising to 3.2 MB only if every
+  layer is toggled on. The first-party numbers come from `tools/bench`; see
   [Benchmarks](#benchmarks). On top of them a cold visit also fetches about
   670 KB from the third-party hosts listed under
-  [Requirements](#requirements) — Three.js from `esm.sh` (~192 KB gzipped), the
-  Draco decoder from gstatic (~98 KB gzipped) and the webfonts (~379 KB, of
-  which 314 KB is the Material Symbols icon font) — so a genuinely cold first
-  visit is nearer 1.05 MB. Those are not optional: the same table records that
-  without `esm.sh` nothing renders at all.
+  [Requirements](#requirements) — Three.js from `esm.sh` (~192 KB gzipped) and
+  the webfonts (~379 KB, of which 314 KB is the Material Symbols icon font) on
+  arrival, and the Draco decoder from gstatic (~98 KB gzipped) when the first
+  mesh is decoded — so a genuinely cold visit that loads the reference eye is
+  nearer 1.06 MB. Those are not optional: the same table records that without
+  `esm.sh` nothing renders at all.
 - **Browser caching** — assets are cached via the Cache Storage API, so they
   download once and load instantly afterwards.
 - **Responsive** — a draggable divider on desktop; a collapsible drawer and
@@ -175,15 +178,17 @@ lockfile. The fourth host in the [Requirements](#requirements) table,
 `huggingface.co`, is absent here because it is not a dependency — it serves the
 default *dataset*, which is swappable with `?dataset=`.
 
-Under package management, with a committed lockfile each. There is no shared
-install: the two tools are separate packages and are installed from their own
-directories.
+Under package management: the three npm packages each have a committed
+lockfile, and the Python requirements for the anatomy rebuild pin `gmsh` and
+`trimesh`. There is no shared install: the tools are separate packages and are
+installed from their own directories.
 
 | Package | Install | Dependencies |
 |---|---|---|
 | `package.json` (root) | `npm ci` at the repo root | `three ^0.169.0` and `@playwright/test ^1.49.0`, both devDependencies — `three` for the headless [core tests](#tests), Playwright for the browser suite. `three` is *also* declared as a peer dependency, for consumers who [import `core/`](#using-the-core-in-your-own-page). |
 | `tools/bench/package.json` | `cd tools/bench && npm install` | `@gltf-transform/core`, `@gltf-transform/extensions`, `draco3dgltf` — see [Benchmarks](#benchmarks) |
 | `tools/optimize/package.json` | `cd tools/optimize && npm install` | `@gltf-transform/core` — see [Regenerating optimized assets](#regenerating-optimized-assets) |
+| `tools/optimize/anatomy/requirements.txt` | `python3 -m pip install -r tools/optimize/anatomy/requirements.txt` | `gmsh==4.15.2`, `trimesh==5.1.1`, `numpy`, `networkx`, `scipy`, `pillow` for rebuilding the reference eye models; on Linux `gmsh` also needs system GL/X11 libraries — see [`tools/optimize/README.md`](tools/optimize/README.md#setup) |
 
 ### Running against the checked-in dataset
 
@@ -194,7 +199,8 @@ Draco GLBs — so the viewer runs without reaching Hugging Face:
 http://127.0.0.1:8123/?dataset=local/F10/F10_layers.csv&demo=off
 ```
 
-That is the dataset the Playwright suite pins itself to. It removes one host,
+That is the dataset the Playwright suite pins itself to (one test instead loads
+`test/e2e/fixtures/xss-manifest.csv`, also same-origin). It removes one host,
 not all four: Three.js, the Draco decoder and the webfonts still come from their
 CDNs, so this is independence from the dataset, not an offline run. A genuinely
 air-gapped deployment means vendoring `three` into the import map, self-hosting
@@ -319,7 +325,7 @@ and column order does not matter:
 | `file_name` | yes | Identifies the structure within its sample — the structure id is `<sample>__<file_name>` — and is the label when `seg_mesh_label` is absent. |
 | `seg_mesh_link` | yes | Where the mesh is downloaded from. The extension picks the parser: `.glb` / `.gltf` are read as glTF, anything else as binary STL. For a manifest imported with its meshes, a bare file name matches a supplied file. |
 | `seg_mesh_label` | no | Display label; falls back to `file_name` when missing or empty. |
-| `sample_link` | no | Provenance link, shown as the ↗ beside the sample. Defaults to empty. |
+| `sample_link` | no | Provenance link, shown as the ↗ beside the sample. Only an http(s) link (absolute, or relative to the page) is shown; any other scheme, such as `javascript:` or `data:`, is ignored. Defaults to empty. |
 | `notes` | no | Free text carried onto the structure record (parsed, but not displayed today). Defaults to empty. |
 
 A row missing any of the three required values is skipped silently, so a
@@ -362,8 +368,8 @@ shown for orientation:
 
 All three are **human** eyes while the segmented scan is **mouse**; they are
 references for orientation, not for morphometric comparison. The model menu
-offers only these three. The other open eye-modelling projects that were
-surveyed for this pane and ship no 3D geometry (ISETBio, OpenRetina, V-Cornea,
+offers only these three. The other open projects that were surveyed for this
+pane and ship no usable 3D eye geometry (ISETBio, OpenRetina, V-Cornea,
 OpenEyeSim, pulse2percept, Open Source Brain) are recorded, each with the reason
 it was rejected, in the provenance README linked below.
 
@@ -380,9 +386,11 @@ the eye models are rebuilt from their upstream sources with
 
 ```bash
 cd tools/optimize && npm install   # one-time; optimize has its own dependencies
+python3 -m pip install -r anatomy/requirements.txt   # only to rebuild the eye models
 ```
 
-See [`tools/optimize/`](tools/optimize) for the pipeline.
+See [`tools/optimize/`](tools/optimize) for the pipeline and the system
+libraries `gmsh` needs on Linux.
 
 ---
 
@@ -651,15 +659,17 @@ plus a static scan proving no core module reaches for a browser global, and
 the `app/ui/` view modules rendered into a small fake DOM over a headless
 workbench, and the file-import path (the manifest parser on text, samples built
 from picked files, the local-file `io`, the Import dialog and drop targets)
-(540 tests, Node's built-in runner; `three` is the only devDependency the unit
+(552 tests, Node's built-in runner; `three` is the only devDependency the unit
 tests need — `@playwright/test` serves the browser suite alone).
 `npm run test:e2e` drives the actual application in Chromium — Playwright
 starts `tools/dev-serve.py` on port 8124 itself, so python3 must be on PATH —
 and checks that WebGL starts, that a toggled layer reaches the GPU, that the
 asset cache fills, that files picked from disk and a manifest URL typed into
-the dialog both reach the scene, and that the controls behave (20 tests). Both
-run in CI on every pull request and on pushes to `main`, along with a decode of
-every shipped asset.
+the dialog both reach the scene, that markup in a manifest's names, a file name
+or an `?anatomy=` file's load error is shown as text and never run, and that the
+controls behave (22 tests).
+Both run in CI on every pull request and on pushes to `main`, along with a
+decode of every shipped asset.
 
 ## Benchmarks
 
@@ -672,10 +682,10 @@ node bench.mjs                  # or `npm run bench` from the repo root
 not install it. See [Dependencies](#dependencies).
 
 Reports the size, triangle count and compression of every shipped asset, and
-the first-paint payload. `node --max-old-space-size=16384 bench.mjs --verify
-<source.stl> <optimized.glb>` measures the surface error introduced by
-decimation; the full-resolution sources are not in git (~1.0 GB + ~150 MB), so
-fetch them first — see
+what a first visit and a **Load model** click download.
+`node --max-old-space-size=16384 bench.mjs --verify <source.stl> <optimized.glb>`
+measures the surface error introduced by decimation; the full-resolution
+sources are not in git (~1.0 GB + ~150 MB), so fetch them first — see
 [Getting the source meshes](tools/bench/README.md#getting-the-source-meshes).
 
 Measured on the shipped assets:
@@ -685,13 +695,15 @@ Measured on the shipped assets:
 | `eye.stl` | 21,141,576 | 1008 MB | 633 KB | 1631x | 0.017% | +0.63% |
 | `feature.stl` | 3,131,220 | 149 MB | 325 KB | 471x | 0.006% | +0.21% |
 
-First paint: a 210 KB app shell (68 KB gzipped) plus the 343 KB default anatomy
-= 553 KB raw, 411 KB over the wire. Toggling on every segmented layer brings the
-total to 3.2 MB.
+First visit: a 213 KB app shell (69 KB gzipped) and nothing else from this
+repository. Load model: the shell plus the 343 KB default anatomy = 556 KB raw,
+412 KB over the wire. Toggling on every segmented layer brings the total to
+3.2 MB.
 
 `tools/bench` walks this repository only, so those figures are first-party
-bytes. A cold visit to the deployed page also pulls roughly 670 KB from the
-third-party hosts in [Requirements](#requirements) — measured with `curl` over
+bytes. A cold visit to the deployed page that loads the reference eye also pulls
+roughly 670 KB from the third-party hosts in [Requirements](#requirements) (the
+Draco decoder only once a mesh is decoded) — measured with `curl` over
 the exact URLs `index.html` and `core/mesh-parsers.js` request, as the CDNs
 serve them: `esm.sh` 196,723 B gzipped for `three` and the four addon modules,
 gstatic 100,707 B gzipped for the Draco wrapper and wasm, and 387,750 B of

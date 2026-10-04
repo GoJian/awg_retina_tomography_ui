@@ -1,0 +1,16 @@
+# Python packages for ./build-anatomy.sh (build_models.py):
+#   python3 -m pip install -r tools/optimize/anatomy/requirements.txt
+# gmsh and trimesh are pinned. With these pins upat-oculomotor.glb rebuilds
+# identically (bar the glTF-Transform generator string); the two STEP models
+# come out within a few triangles per structure of the shipped ones.
+# scipy is needed by trimesh's mesh processing (Trimesh(process=True) and
+# fix_normals), networkx by its winding repair, and Pillow by trimesh.load of
+# the Upatras OBJs, which carry UV coordinates without their .mtl files, so
+# trimesh builds a placeholder texture image. On Linux the gmsh wheel also
+# needs system GL/X11 libraries; see tools/optimize/README.md.
+gmsh==4.15.2
+trimesh==5.1.1
+numpy
+networkx
+scipy
+pillow

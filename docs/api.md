@@ -287,7 +287,7 @@ Plain data, no DOM, no Three: the models the left pane can show.
 
 | Export | What it is |
 |---|---|
-| `ANATOMY_MODELS` | The three loadable models. The surveyed projects that ship no geometry are documented in `optimized/anatomy/README.md`, not listed here. |
+| `ANATOMY_MODELS` | The three loadable models. The surveyed projects that ship no usable eye geometry are documented in `optimized/anatomy/README.md`, not listed here. |
 | `DEFAULT_MODEL_ID` | `'mesheye'`. |
 | `STRUCTURE_STYLES` | The per-structure defaults (label, group, colour, opacity, roughness, nesting `depth`, and `coat` for the structures the µCT also resolves). |
 | `modelById(id)` | The model record, or `undefined` for an unknown id. |

@@ -21,7 +21,7 @@ affiliations:
     index: 1
   - name: University of Wyoming, School of Computing, Laramie, Wyoming, USA
     index: 2
-date: 29 September 2026
+date: 4 October 2026
 bibliography: paper.bib
 ---
 
@@ -56,23 +56,27 @@ looking at it is unchanged.
 # State of the field
 
 3D Slicer [@fedorov2012slicer] and ITK-SNAP [@yushkevich2006itksnap] do more than this viewer,
-including named segments, per-segment visibility, colour and opacity, and synchronised cameras.
-Both are desktop installs, and Slicer's user guide advises "10x more memory than the amount of data
-that you load" [@slicerdocs]. In the browser, NiiVue [@niivue; @eckstein2026niivue], Neuroglancer
-[@neuroglancer] and itk-vtk-viewer [@itkvtkviewer] render meshes client-side, and two already bind
-a dataset at run time as this viewer does: itk-vtk-viewer takes mesh URLs as `?fileToLoad=`, and a
-Neuroglancer scene is a pasteable link. The Open Anatomy Browser [@halle2017oabrowser] is closest,
-being zero-install, manifest-described, named and static. We claim novelty in none of this.
+including named segments, per-segment visibility, colour and opacity, and synchronised cameras. Both
+are desktop installs, and Slicer's user guide advises "10x more memory than the amount of data that
+you load" [@slicerdocs]. In the browser, NiiVue [@niivue; @eckstein2026niivue], Neuroglancer
+[@neuroglancer] and itk-vtk-viewer [@itkvtkviewer] render meshes client-side, and all three already
+bind a dataset at run time as this viewer does: NiiVue's web app and itk-vtk-viewer take mesh URLs
+as `?images=` and `?fileToLoad=` respectively, and a Neuroglancer scene is a pasteable link. The
+Open Anatomy Browser [@halle2017oabrowser] is closest, being zero-install, manifest-described, named
+and static. We claim novelty in none of this.
 
 What none supplies is the other half of the comparison. None of the Open Anatomy atlases is ocular,
-and of six open eye-modelling projects we surveyed (ISETBio, OpenRetina, V-Cornea, OpenEyeSim,
-`pulse2percept` and Open Source Brain) none ships usable 3D geometry. This viewer therefore ships
-its own: three published eye models with per-structure names and provenance, in a second
-camera-linked pane. A multi-toggle layer panel would have been a fair contribution to
-itk-vtk-viewer, whose geometry panel selects one mesh at a time. The second pane would not: each of
-those tools builds exactly one scene — one `vtkProxyManager` in itk-vtk-viewer, one `THREE.Scene`
-in the Open Anatomy Browser — so a second populated scene changes a central assumption instead of
-extending it. Hence a small library over three.js [@threejs], not a fork.
+and of six related open projects we surveyed (ISETBio [@cottaris2019isetbio], OpenRetina
+[@dagostino2026openretina], V-Cornea [@vanin2025vcornea; @vanin2025vcorneacode], OpenEyeSim
+[@priamikov2016openeyesim], `pulse2percept` [@beyeler2017pulse2percept] and Open Source Brain
+[@gleeson2019osb]) none ships usable 3D eye geometry. This viewer therefore ships its own: three
+published eye models with per-structure names and provenance, in a second camera-linked pane. A
+multi-toggle layer panel would have been a fair contribution to itk-vtk-viewer, whose geometry panel
+selects one mesh at a time. The second pane would not: itk-vtk-viewer and the Open Anatomy Browser
+each build one model scene — one `vtkProxyManager`, and one model `THREE.Scene` beside an axes-only
+inset scene — so a second populated scene changes a central assumption instead of extending it.
+Neuroglancer and NiiVue already link cameras across panes, but neither reads glTF, the format of
+this viewer's bundled meshes. Hence a small library over three.js [@threejs], not a fork.
 
 # Software design
 
@@ -87,21 +91,20 @@ a single module constructs the WebGL context. Freedom from the DOM is enforced b
 over `core/` rather than proved. In exchange the geometry, clipping and loading logic runs under
 Node in seconds.
 
-Data reaches the viewer by one path whatever its source: the default manifest, a manifest URL
-typed into the Import dialog or passed as `?dataset=`, and files dropped onto the page all become
-the same sample records. Dropped meshes, with or without a manifest naming them, are served to the
-core through an `io` wrapper that reads them from memory, so the core never learns that a `File`
-exists and nothing is uploaded. A manifest URL is written back into the address bar, which makes a
-view shareable as a link; a drop deliberately is not, because the files it names live on one
-machine.
+Data reaches the viewer by one path whatever its source: the default manifest, a manifest URL typed
+into the Import dialog or passed as `?dataset=`, and files dropped onto the page all become the same
+sample records. Dropped meshes are served to the core through an `io` wrapper that reads them from
+memory, so the core never learns that a `File` exists and nothing is uploaded. A manifest URL is
+written back into the address bar, which makes a view shareable as a link; a drop is not, because
+the files it names live on one machine.
 
-Decimation answers a client limit, not a hosting one: a gigabyte-scale segmentation exceeds what a
-browser can hold however it is served. A documented pipeline converts binary STL to glTF, welds it
-into an indexed mesh, decimates it with the error-bounded simplifier in `meshoptimizer`
-[@meshoptimizer] and compresses it with Draco [@draco]; layers stream on toggle into the Cache
-Storage API, so each mesh downloads at most once per browser. `tools/bench` measures the cost as a
-symmetric point-to-surface distance, area-weighted over both meshes and normalised by the
-bounding-box diagonal:
+Decimation answers a client cost, not a hosting one: the viewer does load a 1 GB, 21 M-triangle STL,
+but reading and parsing it took about 12 s and 2.4 GB; the decimated copy loads in under a second. A
+documented pipeline built on glTF Transform [@gltftransform] converts binary STL to glTF, welds it
+into an indexed mesh, decimates it with the `meshoptimizer` simplifier [@meshoptimizer] and
+compresses it with Draco [@draco]; layers stream on toggle into the Cache Storage API, so each mesh
+downloads at most once per browser. `tools/bench` measures the cost as a symmetric point-to-surface
+distance, area-weighted over both meshes and normalised by the bounding-box diagonal:
 
 | Mesh | Triangles | Source | Shipped | Reduction | Mean error | p99 | Area |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -110,19 +113,18 @@ bounding-box diagonal:
 
 Discarding 98.5% of `eye.stl`'s triangles moves the surface by 0.017% of the diagonal on average;
 the worst-case (Hausdorff) distances, 3.99% and 1.10%, fall almost entirely in the
-original-to-decimated direction, consistent with fragments removed rather than the principal
-surface displaced. The result is an instrument for orientation and triage, not morphometry. A
-first visit transfers about 411 KB — a 210 KB shell, served gzipped at 68 KB, plus the 343 KB
-Draco-compressed anatomy — against 1.13 GB of source meshes, with `three` and the Draco decoder
-fetched from CDNs on top.
+original-to-decimated direction, consistent with fragments removed rather than the principal surface
+displaced. The result is an instrument for orientation and triage, not morphometry. A first visit
+transfers a 213 KB shell, served gzipped at 69 KB; loading the default reference eye adds 343 KB,
+against 1.13 GB of source meshes, with `three`, the webfonts and the Draco decoder fetched from CDNs
+on top.
 
 The left pane holds third-party published anatomy, not NASA data: `feelpp/mesh.eye`
 [@chabannes2024mesheye; @sala2024ovs], the SolidWorks CAD eye it derives from, and the Upatras
-OpenSim oculomotor model with its six extraocular muscles [@filip2018upat], each with one named
-node per structure under its own upstream licence. The menu offers only these; the six surveyed
-projects that ship no geometry are recorded, with the reason each was rejected, in the provenance
-audit. Because these models are human while the segmentation is murine, the interface states that
-the left pane is for orientation, not cross-species morphometry.
+OpenSim oculomotor model with its six extraocular muscles [@filip2018upat], each with one named node
+per structure under its own upstream licence. Because these models are human while the segmentation
+is murine, the interface states that the left pane is for orientation, not cross-species
+morphometry.
 
 # Research impact statement
 
@@ -130,36 +132,35 @@ The NASA GeneLab Analysis Working Group, for whom the viewer was built, has used
 segmented µCT data and compare structures across it; the specimen in \autoref{fig:viewer} is that
 data.
 
-The viewer is deployed and publicly usable, and the data behind it are open and ungated. The
-segmented meshes, the CSV manifest, the source reconstruction slices and the full-resolution
-meshes the shipped assets were decimated from are published under MIT at
-<https://huggingface.co/datasets/kush1434/awg_retina_tomography_ui>, so a reader can recompute
-the reduction factors and error bounds above instead of taking them on trust: publishing the
-gigabyte a 633 KB derivative came from is what makes its accuracy claim falsifiable. `tools/bench` uses a fixed seed, so runs are reproducible.
+The viewer is deployed at <https://gojian.github.io/awg_retina_tomography_ui/>, and the data behind
+it are open and ungated. The segmented meshes, the CSV manifest, the source reconstruction slices
+and the full-resolution meshes the shipped assets were decimated from are published under MIT on
+Hugging Face [@shah2025awgdata], so a reader can recompute the reduction factors and error bounds
+above instead of taking them on trust. `tools/bench` uses a fixed seed, so runs are reproducible.
 
 `optimized/anatomy/README.md` is a licence-and-geometry audit of nine entries from eight open
-eye-modelling projects: per-structure triangle counts, volumes and upstream DOIs for the three
-that distribute usable 3D eye geometry [@chabannes2024mesheye; @sala2024ovs; @filip2018upat], and
-a recorded check for the six that do not. That geometry is other groups' published work, carried
-under its own GPL-3.0 and CC BY 4.0 terms; MIT covers the viewer code only.
+projects: per-structure triangle counts, volumes and upstream DOIs for the three that distribute
+usable 3D eye geometry [@chabannes2024mesheye; @sala2024ovs; @filip2018upat], and a recorded check
+for the six that do not. That geometry is other groups' published work, carried under its own
+GPL-3.0 and CC BY 4.0 terms; MIT covers the viewer code only.
 
-540 unit tests on Node's built-in runner cover the data and caching layers, the file import, the
+552 unit tests on Node's built-in runner cover the data and caching layers, the file import, the
 geometry code behind the error figures above, and the core library, run headless under a stub
-renderer with the real orbit controls on synthetic STL and uncompressed glTF. 20 Playwright tests
-drive the real application in Chromium, including a file import from disk and a manifest loaded
-by URL. CI runs both suites and decodes every shipped asset, so a corrupt mesh fails the build.
+renderer on synthetic STL and uncompressed glTF. 22 Playwright tests drive the real application in
+Chromium, including a file import from disk and a manifest loaded by URL. CI runs both suites and
+decodes every shipped asset, so a corrupt mesh fails the build.
 
 # AI usage disclosure
 
 Generative AI was used in developing this software and preparing this submission: Claude
-(Anthropic), accessed through Claude Code from June to October 2026, using Claude Opus 4.8
-(`claude-opus-4-8`), Claude Opus 5 (`claude-opus-5`), Claude Fable 5.1 (`claude-fable-5-1`) and
-Claude Opus 5.5 (`claude-opus-5-5`).
+(Anthropic), from November 2025 to October 2026, through Claude Code from June 2026, using Claude
+Opus 4.8 (`claude-opus-4-8`), Claude Opus 5 (`claude-opus-5`), Claude Fable 5.1 (`claude-fable-5-1`)
+and Claude Opus 5.5 (`claude-opus-5-5`).
 
-- *The application.* The first viewer (November 2025 to January 2026) was written without AI.
-  From June 2026 it was rewritten with AI assistance: Claude Opus 4.8 wrote `viewer.js`,
-  `asset-loader.js`, the decimation pipeline and the shipped µCT meshes; Opus 5 the anatomy-model
-  build scripts; Opus 5.5 the file import.
+- *The application.* The first viewer (November 2025 to January 2026) was written with Claude (model
+  version not recorded). From June 2026 it was rewritten with AI assistance: Claude Opus 4.8 wrote
+  `viewer.js`, `asset-loader.js`, the decimation pipeline and the shipped µCT meshes; Opus 5 the
+  anatomy-model build scripts; Opus 5.5 the file import.
 - *Core-library refactor.* The DOM-free `core/` library was extracted from `viewer.js` with
   Claude Fable 5.1, following a written architecture plan the authors reviewed; each step was
   gated on the full test suite and verified against the unchanged end-to-end tests.

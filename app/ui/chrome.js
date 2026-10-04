@@ -21,6 +21,17 @@ export function setFill(input) {
 // ---------------------------------------------------------------------------
 //  Toasts + confirm
 // ---------------------------------------------------------------------------
+function textDiv(className, text) {
+  const el = document.createElement('div');
+  el.className = className; el.textContent = text;
+  return el;
+}
+function button(className, act, text) {
+  const el = document.createElement('button');
+  el.className = className; el.dataset.act = act; el.textContent = text;
+  return el;
+}
+
 export function toast(message, type = 'info', ms = 6000) {
   const el = document.createElement('div');
   el.className = `toast toast-${type}`; el.textContent = message;
@@ -28,19 +39,19 @@ export function toast(message, type = 'info', ms = 6000) {
   requestAnimationFrame(() => el.classList.add('show'));
   setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, ms);
 }
+// The modal is built node by node and its strings set as text: a message can
+// quote a layer label, which comes from an untrusted manifest or file name.
 export function askConfirm({ title, message, confirmLabel = 'OK' }) {
   return new Promise((resolve) => {
     const back = document.createElement('div');
     back.className = 'modal-back';
-    back.innerHTML = `
-      <div class="modal" role="dialog" aria-modal="true">
-        <div class="modal-title">${title}</div>
-        <div class="modal-msg">${message}</div>
-        <div class="modal-actions">
-          <button class="btn btn-ghost" data-act="cancel">Cancel</button>
-          <button class="btn btn-primary" data-act="ok">${confirmLabel}</button>
-        </div>
-      </div>`;
+    const modal = document.createElement('div');
+    modal.className = 'modal'; modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true');
+    const actions = document.createElement('div');
+    actions.className = 'modal-actions';
+    actions.append(button('btn btn-ghost', 'cancel', 'Cancel'), button('btn btn-primary', 'ok', confirmLabel));
+    modal.append(textDiv('modal-title', title), textDiv('modal-msg', message), actions);
+    back.appendChild(modal);
     document.body.appendChild(back);
     const done = (v) => { back.remove(); resolve(v); };
     back.addEventListener('click', (e) => {
@@ -139,8 +150,9 @@ export function focusSample(wb, sampleId) {
   if (sample) $('#study-label').textContent = `${sample.label.toUpperCase()} · µCT · SEG`;
 
   wb.layers.focusSample(sampleId);
-  // Reveal the sample in the left rail.
-  const el = $('#layer-tree').querySelector(`[data-sample-id="${sampleId}"]`);
+  // Reveal the sample in the left rail. The id derives from a manifest's
+  // sample name, so it is compared rather than spliced into a selector.
+  const el = [...$('#layer-tree').querySelectorAll('.sample')].find((g) => g.dataset.sampleId === sampleId);
   el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
@@ -151,9 +163,15 @@ export function buildStudyMenu(wb, samples) {
     const n = sample.structures.length;
     const item = document.createElement('button');
     item.className = 'study-item'; item.setAttribute('role', 'menuitem');
-    item.innerHTML = `<span class="ms">${sample.demo ? 'content_copy' : sample.imported ? 'upload_file' : 'folder_open'}</span>
-      <span class="study-item-name">${sample.label}</span>
-      <span class="study-item-meta mono">${n} layer${n === 1 ? '' : 's'}</span>`;
+    // The sample name comes from a manifest or a file name, so every span is
+    // set as text rather than through innerHTML.
+    const icon = document.createElement('span');
+    icon.className = 'ms'; icon.textContent = sample.demo ? 'content_copy' : sample.imported ? 'upload_file' : 'folder_open';
+    const name = document.createElement('span');
+    name.className = 'study-item-name'; name.textContent = sample.label;
+    const meta = document.createElement('span');
+    meta.className = 'study-item-meta mono'; meta.textContent = `${n} layer${n === 1 ? '' : 's'}`;
+    item.append(icon, name, meta);
     item.addEventListener('click', () => { focusSample(wb, sample.id); closeStudyMenu(); });
     menu.appendChild(item);
   }

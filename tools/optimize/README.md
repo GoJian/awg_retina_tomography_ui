@@ -8,20 +8,45 @@ reference eye models from their upstream CAD and OpenSim sources.
 ## Setup
 
 ```bash
-npm install -g @gltf-transform/cli@4.0.0   # pinned; provides `gltf-transform`
+npm install -g @gltf-transform/cli@4.4.0   # pinned (inferred, see below); provides `gltf-transform`
 npm install                                # @gltf-transform/core for the STL converter
 ```
 
-The pin matters: the CLI bundles its own meshoptimizer build, and an unpinned
-one will not reproduce the shipped assets or the reduction figures in the
-results table below. `4.0.0` is the version those assets were built with.
+The pin matters for `simplify`, which runs meshoptimizer: CLI 4.0.0 pins
+meshoptimizer 0.20.0, CLIs 4.3 to 4.4 use 1.0.1 and 4.5 uses 1.2, and on the
+same test mesh 4.0.0 and 4.4.0 decimate differently. Which CLI built the shipped
+segmented layers was not recorded, so 4.4.0 is inferred: the layers were
+committed on 30 June 2026, when this README said to install the CLI unpinned and
+the newest CLI was 4.4.0, and the GLBs name glTF-Transform v4.4.0 as the library
+that wrote them. (An earlier version of this README pinned 4.0.0, which had no
+source.) To confirm it, rebuild `original/feature.stl` at ratio `0.06` and
+compare the result with the shipped `feature.glb`. The reference eye models use
+only `draco`, and CLIs 4.0.0, 4.4.0 and 4.4.2 all rebuild `upat-oculomotor.glb`
+identically apart from the generator string. In every case the CLI's
+`@gltf-transform/core`, `functions` and `extensions` dependencies float within
+`^4`.
 
 Rebuilding the reference eye models (`./anatomy/build-anatomy.sh`) additionally
-needs `git` and python3 packages:
+needs `git` and the python3 packages in
+[`anatomy/requirements.txt`](anatomy/requirements.txt) — `gmsh` and `trimesh`
+pinned, plus `numpy`, `networkx` and `scipy` (trimesh's mesh processing and
+winding repair) and `pillow` (trimesh builds a placeholder texture for the
+Upatras OBJs, which carry UV coordinates):
 
 ```bash
-python3 -m pip install gmsh trimesh numpy networkx
+python3 -m pip install -r anatomy/requirements.txt
 ```
+
+On Linux the `gmsh` wheel links against system GL and X11 libraries that
+minimal and container images often lack (`import gmsh` then fails with
+`libGLU.so.1: cannot open shared object file`). On Ubuntu (checked on 24.04):
+
+```bash
+sudo apt-get install libglu1-mesa libgl1 libxft2 libxinerama1 libxcursor1 libgomp1
+```
+
+`gmsh` 4.15.2 has Linux wheels for x86_64 only; on Linux arm64, install gmsh
+from your distribution or build it from source.
 
 ## Segmented STL layers
 

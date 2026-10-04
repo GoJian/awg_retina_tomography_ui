@@ -46,6 +46,7 @@ function makePanel({ cached = [], routes = null, options = {} } = {}) {
 }
 
 const loaded = (wb) => waitFor(() => wb.anatomy.parts.size > 0 && !wb.anatomy.loading);
+const sub = (overlay) => overlay().querySelector('.overlay-sub')?.textContent;
 
 // ---------------------------------------------------------------------------
 //  Model menu
@@ -235,9 +236,11 @@ describe('renderOverlay', () => {
     overlay().classList.add('hidden');
     await panel.renderOverlay('idle');
     assert.equal(overlay().classList.contains('hidden'), false);
-    assert.match(overlay().innerHTML, /<div class="overlay-title">mesh\.eye<\/div>/);
-    assert.match(overlay().innerHTML, /<div class="overlay-sub">Human eyeball · 10 structures incl\. lamina cribrosa<\/div>/);
-    assert.match(overlay().innerHTML, /id="overlay-load">Load model</);
+    assert.equal(overlay().querySelector('.overlay-icon').textContent, 'visibility');
+    assert.equal(overlay().querySelector('.overlay-title').textContent, 'mesh.eye');
+    assert.equal(sub(overlay), 'Human eyeball · 10 structures incl. lamina cribrosa');
+    assert.equal(overlay().querySelector('#overlay-load').textContent, 'Load model');
+    assert.equal(overlay().querySelector('#overlay-load').className, 'btn btn-primary');
     overlay().querySelector('#overlay-load').onclick();
     assert.equal(load.mock.callCount(), 1);
   });
@@ -245,7 +248,7 @@ describe('renderOverlay', () => {
   test('idle: says when the model file is already cached', async () => {
     const { panel, overlay } = makePanel({ cached: [MESHEYE_URL] });
     await panel.renderOverlay('idle');
-    assert.match(overlay().innerHTML, /lamina cribrosa · cached<\/div>/);
+    assert.match(sub(overlay), /lamina cribrosa · cached$/);
   });
 
   test('idle: an ?anatomy= override is what the cache is asked about', async () => {
@@ -259,23 +262,41 @@ describe('renderOverlay', () => {
     const { wb, panel, overlay } = makePanel();
     const cancel = mock.method(wb.anatomy, 'cancel', () => {});
     await panel.renderOverlay('loading', { pct: 42, label: '42% · 1 MB / 2 MB' });
-    assert.match(overlay().innerHTML, /<div class="progress-fill" style="width:42%"><\/div>/);
-    assert.match(overlay().innerHTML, /<div class="overlay-sub">42% · 1 MB \/ 2 MB<\/div>/);
+    assert.equal(overlay().querySelector('.overlay-title').textContent, 'Loading eye anatomy');
+    assert.equal(overlay().querySelector('.progress .progress-fill').style.width, '42%');
+    assert.equal(sub(overlay), '42% · 1 MB / 2 MB');
+    assert.equal(overlay().querySelector('#overlay-cancel').className, 'btn btn-ghost');
     overlay().querySelector('#overlay-cancel').onclick();
     assert.equal(cancel.mock.callCount(), 1);
     await panel.renderOverlay('loading', {});
-    assert.match(overlay().innerHTML, /style="width:0%"/);
-    assert.match(overlay().innerHTML, /<div class="overlay-sub"><\/div>/);
+    assert.equal(overlay().querySelector('.progress-fill').style.width, '0%');
+    assert.equal(sub(overlay), '');
   });
 
   test('error: the message with a Try again button that reloads', async () => {
     const { wb, panel, overlay } = makePanel();
     const load = mock.method(wb.anatomy, 'load', async () => {});
     await panel.renderOverlay('error', { message: 'HTTP 404 Not Found' });
-    assert.match(overlay().innerHTML, /<div class="overlay-title">Couldn't load model<\/div>/);
-    assert.match(overlay().innerHTML, /<div class="overlay-sub">HTTP 404 Not Found<\/div>/);
+    assert.equal(overlay().querySelector('.overlay-title').textContent, "Couldn't load model");
+    assert.equal(sub(overlay), 'HTTP 404 Not Found');
     overlay().querySelector('#overlay-retry').onclick();
     assert.equal(load.mock.callCount(), 1);
+  });
+
+  test('each render replaces the previous card', async () => {
+    const { panel, overlay } = makePanel();
+    await panel.renderOverlay('loading', { pct: 10 });
+    await panel.renderOverlay('error', { message: 'x' });
+    assert.equal(overlay().children.length, 1);
+    assert.equal(overlay().querySelector('#overlay-cancel'), null);
+  });
+
+  test('error: a message quoting the fetched file is set as text, never parsed as HTML', async () => {
+    const { panel, overlay } = makePanel();
+    const payload = 'THREE.GLTFLoader: <img src=x onerror=alert(1)> buffer type is not supported.';
+    await panel.renderOverlay('error', { message: payload });
+    assert.equal(sub(overlay), payload);
+    assert.deepEqual(dom.doc.htmlWrites.filter((h) => h.includes('<img')), []);
   });
 });
 
@@ -286,7 +307,7 @@ describe('anatomy:status', () => {
   test('a real load walks the card through Starting… → percent → Building model… and then hides it', async () => {
     const { wb, overlay } = makePanel();
     const labels = [];
-    wb.on('anatomy:status', () => { labels.push(overlay().innerHTML.match(/<div class="overlay-sub">([^<]*)<\/div>/)?.[1] ?? null); });
+    wb.on('anatomy:status', () => { labels.push(overlay().querySelector('.overlay-sub')?.textContent ?? null); });
     const p = wb.anatomy.load();
     await tick();
     assert.equal(labels[0], 'Starting…');
@@ -304,7 +325,7 @@ describe('anatomy:status', () => {
     const labels = [];
     wb.on('anatomy:parts', () => labels.push('parts'));
     // Registered after the panel's listener, so this sees the card already rendered for the same event.
-    wb.on('anatomy:status', (s) => { if (s.state === 'loading' && s.phase === 'download') labels.push(overlay().innerHTML.match(/<div class="overlay-sub">([^<]*)<\/div>/)?.[1]); });
+    wb.on('anatomy:status', (s) => { if (s.state === 'loading' && s.phase === 'download') labels.push(sub(overlay)); });
     await wb.anatomy.load();
     await loaded(wb);
     assert.equal(labels[0], 'Loading from cache…');
@@ -316,23 +337,43 @@ describe('anatomy:status', () => {
     await wb.anatomy.load();
     await waitFor(() => !wb.anatomy.loading);
     assert.equal(overlay().classList.contains('hidden'), false);
-    assert.match(overlay().innerHTML, /Couldn't load model/);
-    assert.match(overlay().innerHTML, /<div class="overlay-sub">HTTP 404 Not Found<\/div>/);
+    assert.equal(overlay().querySelector('.overlay-title').textContent, "Couldn't load model");
+    assert.equal(sub(overlay), 'HTTP 404 Not Found');
     const toasts = dom.doc.el('#toast-host').children;
     assert.equal(toasts.length, 1);
     assert.equal(toasts[0].className, 'toast toast-error');
     assert.equal(toasts[0].textContent, 'Couldn\'t load the eye-anatomy model. HTTP 404 Not Found');
   });
 
+  test('an ?anatomy= file whose glTF puts markup in the loader error shows it as text', async (t) => {
+    t.mock.method(console, 'error', () => {});
+    // three's GLTFLoader quotes bufferDef.type in the error it throws, so the
+    // hosted file decides that text.
+    const payload = '<img src=x onerror=alert(document.domain)>';
+    const gltf = {
+      asset: { version: '2.0' }, scene: 0, scenes: [{ nodes: [0] }], nodes: [{ mesh: 0 }],
+      meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
+      accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' }],
+      bufferViews: [{ buffer: 0, byteLength: 36 }], buffers: [{ type: payload, byteLength: 36 }],
+    };
+    const url = 'https://elsewhere.example/eye.gltf';
+    const { wb, overlay } = makePanel({ routes: { [url]: new TextEncoder().encode(JSON.stringify(gltf)).buffer }, options: { anatomyUrl: url } });
+    await wb.anatomy.load();
+    await waitFor(() => !wb.anatomy.loading);
+    assert.equal(overlay().querySelector('.overlay-title').textContent, "Couldn't load model");
+    assert.ok(sub(overlay).includes(payload), `the loader's message, verbatim: ${sub(overlay)}`);
+    assert.deepEqual(dom.doc.htmlWrites.filter((h) => h.includes('<img')), []);
+  });
+
   test('cancelling mid-download returns to the idle card', async () => {
     const { wb, overlay } = makePanel();
     const p = wb.anatomy.load();
     await tick();
-    assert.match(overlay().innerHTML, /Loading eye anatomy/);
+    assert.equal(overlay().querySelector('.overlay-title').textContent, 'Loading eye anatomy');
     overlay().querySelector('#overlay-cancel').onclick();
     await p;
     await tick();
-    assert.match(overlay().innerHTML, /id="overlay-load">Load model</);
+    assert.equal(overlay().querySelector('#overlay-load').textContent, 'Load model');
     assert.equal(overlay().classList.contains('hidden'), false);
     assert.equal(wb.anatomy.parts.size, 0);
   });
