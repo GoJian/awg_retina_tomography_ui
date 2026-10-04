@@ -14,6 +14,27 @@ import { setFill, toast, askConfirm } from './chrome.js';
 
 const $ = (s) => document.querySelector(s);
 
+// Sample names, layer labels and links come from a manifest anyone can host and
+// share as a ?dataset= link, or from the names of imported files, so they are
+// untrusted: they are only ever set as text, never parsed as HTML.
+function span(className, text) {
+  const el = document.createElement('span');
+  el.className = className; el.textContent = text;
+  return el;
+}
+
+// A manifest's sample_link becomes a clickable anchor only when it is http(s);
+// a javascript: or data: URL would run on this origin when clicked.
+function sourceHref(link) {
+  if (!link) return null;
+  try {
+    const url = new URL(link, document.baseURI);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Build the layer panel over `wb`.
  * @param {object} wb the workbench (core/workbench.js)
@@ -87,16 +108,17 @@ export function createLayerPanel(wb, io) {
       headRow.className = 'sample-head-row';
       const head = document.createElement('button');
       head.className = 'sample-head open';
-      head.innerHTML = `<span class="caret">▸</span><span class="sample-name">${sample.label}</span>`;
+      head.append(span('caret', '▸'), span('sample-name', sample.label));
       const vis = document.createElement('input');
       vis.type = 'checkbox'; vis.className = 'sample-vis'; vis.checked = true; vis.title = 'Show / hide whole sample';
       const gear = document.createElement('button');
       gear.className = 'sample-gear icon-btn'; gear.title = 'Position & opacity';
       gear.innerHTML = '<span class="ms">tune</span>';
       headRow.append(head, vis, gear);
-      if (sample.link) {
+      const href = sourceHref(sample.link);
+      if (href) {
         const a = document.createElement('a');
-        a.className = 'sample-src'; a.href = sample.link; a.target = '_blank'; a.rel = 'noopener'; a.title = 'Source dataset'; a.textContent = '↗';
+        a.className = 'sample-src'; a.href = href; a.target = '_blank'; a.rel = 'noopener'; a.title = 'Source dataset'; a.textContent = '↗';
         headRow.appendChild(a);
       }
 
@@ -163,7 +185,8 @@ export function createLayerPanel(wb, io) {
 
     const label = document.createElement('label');
     label.className = 'layer-label'; label.htmlFor = checkbox.id;
-    label.innerHTML = `<span class="layer-name">${structure.label}</span><span class="layer-size"></span>`;
+    const sizeEl = span('layer-size', '');
+    label.append(span('layer-name', structure.label), sizeEl);
 
     const opacity = document.createElement('input');
     opacity.type = 'range'; opacity.min = '0'; opacity.max = '100';
@@ -180,7 +203,7 @@ export function createLayerPanel(wb, io) {
     top.append(checkbox, swatch, colorInput, label, opacity);
     row.append(top, progress, status);
 
-    const refs = { row, bar, status, progress, checkbox, sizeEl: label.querySelector('.layer-size'), structure };
+    const refs = { row, bar, status, progress, checkbox, sizeEl, structure };
     rowRefs.set(structure.id, refs);
 
     swatch.addEventListener('click', () => colorInput.click());
@@ -242,7 +265,11 @@ export function createLayerPanel(wb, io) {
 
   // The manifest could not be loaded: the tree shows why instead of rows.
   function showError(message) {
-    layerTree.innerHTML = `<div class="tree-error">Could not load the dataset manifest.<br>${message}</div>`;
+    const box = document.createElement('div');
+    box.className = 'tree-error';
+    box.append('Could not load the dataset manifest.', document.createElement('br'), String(message));
+    layerTree.innerHTML = '';
+    layerTree.appendChild(box);
   }
 
   return { wireEvents, build, annotateSize, showError, activate };

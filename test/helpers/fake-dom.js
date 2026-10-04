@@ -61,6 +61,12 @@ class FakeClassList {
   toString() { return [...this.set].join(' '); }
 }
 
+function textNode(text) {
+  const t = new FakeElement('#text');
+  t.textContent = text;
+  return t;
+}
+
 export class FakeElement {
   constructor(tag = 'div') {
     this.tagName = tag.toUpperCase();
@@ -86,9 +92,14 @@ export class FakeElement {
   get className() { return this.classList.toString(); }
   set className(v) { this.classList.set = new Set(String(v).split(/\s+/).filter(Boolean)); }
 
-  // Content set through innerHTML is opaque; it drops the real children.
+  // Content set through innerHTML is opaque; it drops the real children. Each
+  // write is also logged on the installed document (htmlWrites), so a test can
+  // assert that untrusted text never reached the HTML parser.
   get innerHTML() { return this._html; }
-  set innerHTML(v) { this._html = String(v); this.children = []; this._virtual.clear(); }
+  set innerHTML(v) {
+    this._html = String(v); this.children = []; this._virtual.clear();
+    globalThis.document?.htmlWrites?.push(this._html);
+  }
 
   appendChild(el) {
     if (el.tagName === '#FRAGMENT') { for (const c of el.children.slice()) this.appendChild(c); el.children = []; return el; }
@@ -97,7 +108,8 @@ export class FakeElement {
     this.children.push(el);
     return el;
   }
-  append(...els) { els.forEach((e) => this.appendChild(e)); }
+  // Strings become text children, as with the DOM's append().
+  append(...els) { els.forEach((e) => this.appendChild(typeof e === 'string' ? textNode(e) : e)); }
   remove() {
     if (!this.parent) return;
     const i = this.parent.children.indexOf(this);
@@ -161,6 +173,7 @@ export class FakeDocument {
     this.body = new FakeElement('body');
     this.listeners = new Map();
     this.raf = [];
+    this.htmlWrites = [];
   }
   createElement(tag) { return new FakeElement(tag); }
   createDocumentFragment() { return new FakeElement('#fragment'); }

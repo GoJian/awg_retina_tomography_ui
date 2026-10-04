@@ -1,0 +1,3 @@
+sample_name,sample_link,file_name,seg_mesh_label,seg_mesh_link,notes
+<img src=x onerror=alert('sample')>,javascript:alert('link'),retina.glb,<img src=x onerror=alert('layer')>,local/F10/retina.glb,manifest text is untrusted and must render literally
+<img src=x onerror=alert('sample')>,javascript:alert('link'),rpe.glb,<b>RPE</b>,local/F10/rpe.glb,
