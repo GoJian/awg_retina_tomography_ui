@@ -8,24 +8,23 @@ reference eye models from their upstream CAD and OpenSim sources.
 ## Setup
 
 ```bash
-npm install -g @gltf-transform/cli@4.0.0   # pinned; provides `gltf-transform`
+npm install -g @gltf-transform/cli@4.4.0   # pinned (inferred, see below); provides `gltf-transform`
 npm install                                # @gltf-transform/core for the STL converter
 ```
 
-The CLI version matters for `simplify`, which runs meshoptimizer: CLI 4.0.0 pins
-meshoptimizer 0.20.0, while CLIs 4.3 to 4.4 use 1.0.1 and 4.5 uses 1.2, and the
-simplifier's output can change between versions. Which CLI built the shipped
-segmented layers was not recorded. Their GLBs carry only the core library's
-version (v4.4.0); they were committed on 30 June 2026, when this README said to
-install the CLI unpinned and the newest CLI was 4.4.0; and this 4.0.0 pin was
-written down in September. So 4.4.0 is the likelier build version, but neither
-is confirmed. To reproduce the reduction figures in the results table below
-exactly, rebuild `original/feature.stl` at ratio `0.06` with CLI 4.0.0 and with
-4.4.0 and keep the one whose output matches the shipped `feature.glb`. The
-reference eye models use only `draco`, and CLI 4.0.0 and 4.4.2 both rebuild
-`upat-oculomotor.glb` identically apart from the generator string. In every case
-the CLI's `@gltf-transform/core`, `functions` and `extensions` dependencies
-float within `^4`.
+The pin matters for `simplify`, which runs meshoptimizer: CLI 4.0.0 pins
+meshoptimizer 0.20.0, CLIs 4.3 to 4.4 use 1.0.1 and 4.5 uses 1.2, and on the
+same test mesh 4.0.0 and 4.4.0 decimate differently. Which CLI built the shipped
+segmented layers was not recorded, so 4.4.0 is inferred: the layers were
+committed on 30 June 2026, when this README said to install the CLI unpinned and
+the newest CLI was 4.4.0, and the GLBs name glTF-Transform v4.4.0 as the library
+that wrote them. (An earlier version of this README pinned 4.0.0, which had no
+source.) To confirm it, rebuild `original/feature.stl` at ratio `0.06` and
+compare the result with the shipped `feature.glb`. The reference eye models use
+only `draco`, and CLIs 4.0.0, 4.4.0 and 4.4.2 all rebuild `upat-oculomotor.glb`
+identically apart from the generator string. In every case the CLI's
+`@gltf-transform/core`, `functions` and `extensions` dependencies float within
+`^4`.
 
 Rebuilding the reference eye models (`./anatomy/build-anatomy.sh`) additionally
 needs `git` and the python3 packages in

@@ -6,11 +6,10 @@
 # Example (21M-triangle mesh -> ~320k triangles):
 #   ./optimize.sh original/eye.stl ../../optimized/sample_1_seg_mesh/eye.glb 0.015
 #
-# Requires: node, and the gltf-transform CLI. The CLI version decides the
-# meshoptimizer that `simplify` uses (0.20.0 for 4.0.0, 1.0.1 for 4.3-4.4); which
-# one built the shipped layers was not recorded, so see ../optimize/README.md
-# before relying on a rebuild matching them:
-#   npm i -g @gltf-transform/cli@4.0.0
+# Requires: node, and the gltf-transform CLI pinned to 4.4.0, the version
+# inferred for the shipped layers. The CLI version decides the meshoptimizer
+# that `simplify` uses (0.20.0 for 4.0.0, 1.0.1 for 4.3-4.4); see README.md:
+#   npm i -g @gltf-transform/cli@4.4.0
 set -euo pipefail
 
 IN="${1:?input .stl required}"

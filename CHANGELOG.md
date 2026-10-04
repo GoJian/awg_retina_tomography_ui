@@ -45,7 +45,7 @@ All notable changes to this project are documented here. The format follows
   `requirements.txt`. `tools/optimize/README.md` lists the Ubuntu packages the
   `gmsh` wheel links against (`libglu1-mesa libgl1 libxft2 libxinerama1
   libxcursor1 libgomp1`) and the other two point to it; `build-anatomy.sh`
-  names `@gltf-transform/cli@4.0.0`.
+  names the pinned CLI.
 - The About dialog lists both authors, with the affiliations the paper gives.
 - The JOSS paper corrects claims an audit found false: a first visit fetches
   only the app shell; the Open Anatomy Browser builds one model scene beside
@@ -64,12 +64,16 @@ All notable changes to this project are documented here. The format follows
   code is public in `Klimmasch/AEC`, and its only eye mesh is a plain sphere.
   The README and About dialog say the surveyed projects ship no *usable* 3D
   eye geometry.
-- `tools/optimize/README.md` and `optimize.sh` no longer say CLI 4.0.0 built
-  the shipped layers: which CLI did was not recorded (the layers were committed
-  when 4.4.0 was newest), and 4.0.0 and 4.4.0 use different meshoptimizer
-  versions, so the README says how to tell which one reproduces them. For the
-  reference eye models (`draco` only) CLI 4.0.0 and 4.4.2 both rebuild the
-  Upatras model identically apart from the generator string.
+- The optimize pipeline pins `@gltf-transform/cli@4.4.0` (README,
+  `optimize.sh` and `build-anatomy.sh`) instead of 4.0.0. Which CLI built the
+  shipped layers was not recorded; 4.4.0 is inferred, because the layers were
+  committed on 30 June 2026 when the setup said to install the CLI unpinned
+  and 4.4.0 was newest, and their GLBs name glTF-Transform v4.4.0 as their
+  writer. The 4.0.0 pin had no source, and 4.0.0 (meshoptimizer 0.20.0) and
+  4.4.0 (1.0.1) decimate the same test mesh differently. For the reference eye
+  models (`draco` only) CLIs 4.0.0, 4.4.0 and 4.4.2 all rebuild the Upatras
+  model identically apart from the generator string. The paper cites glTF
+  Transform 4.4.0 accordingly.
 - `tools/bench` reports `First visit` (the app shell alone) and `Load model`
   (the shell plus the default anatomy) instead of a `First paint` line that
   counted the anatomy, which a first visit does not download until **Load
