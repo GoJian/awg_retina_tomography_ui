@@ -60,6 +60,9 @@ All notable changes to this project are documented here. The format follows
   revision `97a92d3` (nine new references, each DOI checked by the authors).
   The survey is described as six related open projects, not six eye-modelling
   ones, since Open Source Brain is a general model platform.
+  The AI disclosure now says, as the authors confirm, that the first viewer
+  (November 2025 to January 2026) was also written with Claude, not without
+  AI.
 - `optimized/anatomy/README.md` no longer calls OpenEyeSim unobtainable: its
   code is public in `Klimmasch/AEC`, and its only eye mesh is a plain sphere.
   The README and About dialog say the surveyed projects ship no *usable* 3D

@@ -99,13 +99,12 @@ written back into the address bar, which makes a view shareable as a link; a dro
 the files it names live on one machine.
 
 Decimation answers a client cost, not a hosting one: the viewer does load a 1 GB, 21 M-triangle STL,
-but reading and parsing it took about 12 s and 2.4 GB of memory, where the decimated copy loads in
-under a second. A documented pipeline built on glTF Transform [@gltftransform] converts binary STL
-to glTF, welds it into an indexed mesh, decimates it with the `meshoptimizer` simplifier
-[@meshoptimizer] and compresses it with Draco [@draco]; layers stream on toggle into the Cache
-Storage API, so each mesh downloads at most once per browser. `tools/bench` measures the cost as a
-symmetric point-to-surface distance, area-weighted over both meshes and normalised by the
-bounding-box diagonal:
+but reading and parsing it took about 12 s and 2.4 GB; the decimated copy loads in under a second. A
+documented pipeline built on glTF Transform [@gltftransform] converts binary STL to glTF, welds it
+into an indexed mesh, decimates it with the `meshoptimizer` simplifier [@meshoptimizer] and
+compresses it with Draco [@draco]; layers stream on toggle into the Cache Storage API, so each mesh
+downloads at most once per browser. `tools/bench` measures the cost as a symmetric point-to-surface
+distance, area-weighted over both meshes and normalised by the bounding-box diagonal:
 
 | Mesh | Triangles | Source | Shipped | Reduction | Mean error | p99 | Area |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -147,21 +146,21 @@ GPL-3.0 and CC BY 4.0 terms; MIT covers the viewer code only.
 
 552 unit tests on Node's built-in runner cover the data and caching layers, the file import, the
 geometry code behind the error figures above, and the core library, run headless under a stub
-renderer with the real orbit controls on synthetic STL and uncompressed glTF. 22 Playwright tests
-drive the real application in Chromium, including a file import from disk and a manifest loaded by
-URL. CI runs both suites and decodes every shipped asset, so a corrupt mesh fails the build.
+renderer on synthetic STL and uncompressed glTF. 22 Playwright tests drive the real application in
+Chromium, including a file import from disk and a manifest loaded by URL. CI runs both suites and
+decodes every shipped asset, so a corrupt mesh fails the build.
 
 # AI usage disclosure
 
 Generative AI was used in developing this software and preparing this submission: Claude
-(Anthropic), accessed through Claude Code from June to October 2026, using Claude Opus 4.8
-(`claude-opus-4-8`), Claude Opus 5 (`claude-opus-5`), Claude Fable 5.1 (`claude-fable-5-1`) and
-Claude Opus 5.5 (`claude-opus-5-5`).
+(Anthropic), from November 2025 to October 2026, through Claude Code from June 2026, using Claude
+Opus 4.8 (`claude-opus-4-8`), Claude Opus 5 (`claude-opus-5`), Claude Fable 5.1 (`claude-fable-5-1`)
+and Claude Opus 5.5 (`claude-opus-5-5`).
 
-- *The application.* The first viewer (November 2025 to January 2026) was written without AI.
-  From June 2026 it was rewritten with AI assistance: Claude Opus 4.8 wrote `viewer.js`,
-  `asset-loader.js`, the decimation pipeline and the shipped µCT meshes; Opus 5 the anatomy-model
-  build scripts; Opus 5.5 the file import.
+- *The application.* The first viewer (November 2025 to January 2026) was written with Claude (model
+  version not recorded). From June 2026 it was rewritten with AI assistance: Claude Opus 4.8 wrote
+  `viewer.js`, `asset-loader.js`, the decimation pipeline and the shipped µCT meshes; Opus 5 the
+  anatomy-model build scripts; Opus 5.5 the file import.
 - *Core-library refactor.* The DOM-free `core/` library was extracted from `viewer.js` with
   Claude Fable 5.1, following a written architecture plan the authors reviewed; each step was
   gated on the full test suite and verified against the unchanged end-to-end tests.
