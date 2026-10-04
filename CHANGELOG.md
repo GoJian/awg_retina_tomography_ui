@@ -55,8 +55,9 @@ All notable changes to this project are documented here. The format follows
   for the decimated copy) instead of an absolute. It now says why Neuroglancer's and NiiVue's linked
   panes were not extended (neither reads glTF), gives the deployed URL, credits glTF Transform for
   the weld/simplify/Draco pipeline, and cites the six surveyed eye-modelling
-  projects and the Hugging Face dataset at revision `97a92d3` (eight new
-  references). The survey is described as six related open projects, not six
+  projects (V-Cornea by both its paper and its Zenodo software archive, as
+  it asks) and the Hugging Face dataset at revision `97a92d3` (nine new
+  references, each DOI checked by the authors). The survey is described as six related open projects, not six
   eye-modelling ones, since Open Source Brain is a general model platform.
 - `optimized/anatomy/README.md` no longer calls OpenEyeSim unobtainable: its
   code is public in `Klimmasch/AEC`, and its only eye mesh is a plain sphere.

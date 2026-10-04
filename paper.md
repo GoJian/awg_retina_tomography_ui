@@ -67,16 +67,16 @@ and static. We claim novelty in none of this.
 
 What none supplies is the other half of the comparison. None of the Open Anatomy atlases is ocular,
 and of six related open projects we surveyed (ISETBio [@cottaris2019isetbio], OpenRetina
-[@dagostino2026openretina], V-Cornea [@vanin2025vcornea], OpenEyeSim [@priamikov2016openeyesim],
-`pulse2percept` [@beyeler2017pulse2percept] and Open Source Brain [@gleeson2019osb]) none ships
-usable 3D geometry. This viewer therefore ships its own: three published eye models with
-per-structure names and provenance, in a second camera-linked pane. A multi-toggle layer panel would
-have been a fair contribution to itk-vtk-viewer, whose geometry panel selects one mesh at a time.
-The second pane would not: itk-vtk-viewer and the Open Anatomy Browser each build one model scene —
-one `vtkProxyManager`, and one model `THREE.Scene` beside an axes-only inset scene — so a second
-populated scene changes a central assumption instead of extending it. Neuroglancer and NiiVue
-already link cameras across panes, but neither reads glTF, the format of this viewer's bundled
-meshes. Hence a small library over three.js [@threejs], not a fork.
+[@dagostino2026openretina], V-Cornea [@vanin2025vcornea; @vanin2025vcorneacode], OpenEyeSim
+[@priamikov2016openeyesim], `pulse2percept` [@beyeler2017pulse2percept] and Open Source Brain
+[@gleeson2019osb]) none ships usable 3D geometry. This viewer therefore ships its own: three
+published eye models with per-structure names and provenance, in a second camera-linked pane. A
+multi-toggle layer panel would have been a fair contribution to itk-vtk-viewer, whose geometry panel
+selects one mesh at a time. The second pane would not: itk-vtk-viewer and the Open Anatomy Browser
+each build one model scene — one `vtkProxyManager`, and one model `THREE.Scene` beside an axes-only
+inset scene — so a second populated scene changes a central assumption instead of extending it.
+Neuroglancer and NiiVue already link cameras across panes, but neither reads glTF, the format of
+this viewer's bundled meshes. Hence a small library over three.js [@threejs], not a fork.
 
 # Software design
 
