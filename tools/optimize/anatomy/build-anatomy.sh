@@ -11,8 +11,11 @@
 #   humaneye  feelpp/mesh.eye  human_eye.stp 10 structures  ~352 KB  GPL-3.0
 #   upat      Upatras OpenSim oculomotor      8 structures  ~30 KB   CC BY 4.0
 #
-# Requires: python3 with `gmsh trimesh numpy networkx` (pip), git, and the
-# gltf-transform CLI (`npm i -g @gltf-transform/cli`).
+# Requires: python3 with the packages in requirements.txt beside this script
+# (`python3 -m pip install -r requirements.txt`; on Linux gmsh also needs the
+# GL/X11 libraries listed in ../README.md), git, and the gltf-transform CLI
+# pinned to the version the shipped assets were built with
+# (`npm i -g @gltf-transform/cli@4.0.0`).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"

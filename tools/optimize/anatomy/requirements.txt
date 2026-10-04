@@ -1,0 +1,13 @@
+# Python packages for ./build-anatomy.sh (build_models.py):
+#   python3 -m pip install -r tools/optimize/anatomy/requirements.txt
+# gmsh and trimesh are pinned to the versions that rebuild the shipped models.
+# scipy is needed by trimesh's mesh processing (process=True, fix_normals,
+# volume) and Pillow by trimesh.load of the Upatras OBJs, which reference JPEG
+# textures. On Linux the gmsh wheel also needs system GL/X11 libraries; see
+# tools/optimize/README.md.
+gmsh==4.15.2
+trimesh==5.1.1
+numpy
+networkx
+scipy
+pillow

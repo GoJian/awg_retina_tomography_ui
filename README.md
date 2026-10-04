@@ -178,15 +178,17 @@ lockfile. The fourth host in the [Requirements](#requirements) table,
 `huggingface.co`, is absent here because it is not a dependency — it serves the
 default *dataset*, which is swappable with `?dataset=`.
 
-Under package management, with a committed lockfile each. There is no shared
-install: the two tools are separate packages and are installed from their own
-directories.
+Under package management: the three npm packages each have a committed
+lockfile, and the Python requirements for the anatomy rebuild pin `gmsh` and
+`trimesh`. There is no shared install: the tools are separate packages and are
+installed from their own directories.
 
 | Package | Install | Dependencies |
 |---|---|---|
 | `package.json` (root) | `npm ci` at the repo root | `three ^0.169.0` and `@playwright/test ^1.49.0`, both devDependencies — `three` for the headless [core tests](#tests), Playwright for the browser suite. `three` is *also* declared as a peer dependency, for consumers who [import `core/`](#using-the-core-in-your-own-page). |
 | `tools/bench/package.json` | `cd tools/bench && npm install` | `@gltf-transform/core`, `@gltf-transform/extensions`, `draco3dgltf` — see [Benchmarks](#benchmarks) |
 | `tools/optimize/package.json` | `cd tools/optimize && npm install` | `@gltf-transform/core` — see [Regenerating optimized assets](#regenerating-optimized-assets) |
+| `tools/optimize/anatomy/requirements.txt` | `python3 -m pip install -r tools/optimize/anatomy/requirements.txt` | `gmsh==4.15.2`, `trimesh==5.1.1`, `numpy`, `networkx`, `scipy`, `pillow` for rebuilding the reference eye models; on Linux `gmsh` also needs system GL/X11 libraries — see [`tools/optimize/README.md`](tools/optimize/README.md#setup) |
 
 ### Running against the checked-in dataset
 
@@ -383,9 +385,11 @@ the eye models are rebuilt from their upstream sources with
 
 ```bash
 cd tools/optimize && npm install   # one-time; optimize has its own dependencies
+python3 -m pip install -r anatomy/requirements.txt   # only to rebuild the eye models
 ```
 
-See [`tools/optimize/`](tools/optimize) for the pipeline.
+See [`tools/optimize/`](tools/optimize) for the pipeline and the system
+libraries `gmsh` needs on Linux.
 
 ---
 

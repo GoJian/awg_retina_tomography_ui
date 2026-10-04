@@ -17,10 +17,21 @@ one will not reproduce the shipped assets or the reduction figures in the
 results table below. `4.0.0` is the version those assets were built with.
 
 Rebuilding the reference eye models (`./anatomy/build-anatomy.sh`) additionally
-needs `git` and python3 packages:
+needs `git` and the python3 packages in
+[`anatomy/requirements.txt`](anatomy/requirements.txt) — `gmsh` and `trimesh`
+pinned, plus `numpy`, `networkx`, `scipy` (trimesh's mesh processing) and
+`pillow` (the Upatras OBJs carry JPEG textures):
 
 ```bash
-python3 -m pip install gmsh trimesh numpy networkx
+python3 -m pip install -r anatomy/requirements.txt
+```
+
+On Linux the `gmsh` wheel links against system GL and X11 libraries that
+minimal and container images often lack (`import gmsh` then fails with
+`libGLU.so.1: cannot open shared object file`). On Debian or Ubuntu:
+
+```bash
+sudo apt-get install libglu1-mesa libgl1 libxft2 libxinerama1 libxcursor1 libgomp1
 ```
 
 ## Segmented STL layers
